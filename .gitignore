@@ -1,0 +1,36 @@
+/analysis_plot
+/emo_data
+/futures_data
+/futures_emo_combined_data
+/pictures
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Jupyter
+.ipynb_checkpoints/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+
+# 虚拟环境
+venv/
+.venv/
+env/
+
+# 日志和临时文件
+*.log
+*.tmp
+
+# 环境变量
+.env
