@@ -2,8 +2,8 @@ import pandas as pd
 import os
 
 # 可配置参数
-LAG_MINUTES = 1  # 滞后时间（分钟）
-OUTPUT_PATH = f"../futures_emo_combined_data/sc2210_with_emotion_lag{LAG_MINUTES}min.xlsx"
+LAG_MINUTES = 15  # 滞后时间（分钟）
+OUTPUT_PATH = f"./futures_emo_combined_data/sc2210_with_emotion_lag{LAG_MINUTES}min.xlsx"
 EMOTION_COLUMNS = ['极性', '强度', '支配维度', '信号量', '信号量_等级']  # 选择需要合并的情绪特征列
 
 # 确保输出目录存在
@@ -69,8 +69,8 @@ def merge_data_with_lag(futures_path, emotion_path, lag_minutes=LAG_MINUTES):
 
 if __name__ == "__main__":
     # 文件路径
-    FUTURES_PATH = "../futures_data/sc2210_major_contracts_2024_min.xlsx"
-    EMOTION_PATH = "../emo_data/emo_signals/SC_combined_情绪信号.xlsx"
+    FUTURES_PATH = "./futures_data/sc2210_major_contracts_2024_15min.xlsx"
+    EMOTION_PATH = "./emo_data/emo_signals/SC_combined_情绪信号_15min.xlsx"
     
     # 执行合并
     result_df = merge_data_with_lag(FUTURES_PATH, EMOTION_PATH, LAG_MINUTES)

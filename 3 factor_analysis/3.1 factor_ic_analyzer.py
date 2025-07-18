@@ -13,12 +13,12 @@ plt.rcParams['font.sans-serif'] = ['Arial Unicode MS']  # 使用支持中文的�
 plt.rcParams['axes.unicode_minus'] = False  # 正常显示负号
 
 # 创建输出目录
-output_dir = '../analysis_plot'
+output_dir = './analysis_plot'
 os.makedirs(output_dir, exist_ok=True)
 
 # 加载数据
 print("Loading data...")
-df = pd.read_excel("../futures_emo_combined_data/sc2210_with_emotion_lag1min.xlsx")
+df = pd.read_excel("./futures_emo_combined_data/sc2210_with_emotion_lag15min.xlsx")
 print("Data loaded, shape:", df.shape)
 
 # 将时间列转换为datetime格式
@@ -27,7 +27,7 @@ df['date'] = df['DateTime'].dt.date
 
 # 待分析因子列表
 factors = ['极性', '强度', '支配维度', '信号量', '信号量_等级']
-target = 'FutureReturn_1min'  # 目标变量
+target = 'FutureReturn_1period'  # 目标变量
 
 def preprocess_data(data):
     """
@@ -500,7 +500,7 @@ def analyze_factor_returns(data, factor, n_groups=5):
                                        labels=False)
     
     # 计算各组收益率
-    group_returns = data.groupby('factor_quantile')['FutureReturn_1min'].mean()
+    group_returns = data.groupby('factor_quantile')['FutureReturn_1period'].mean()
     
     # 计算多空组合收益
     long_short_return = group_returns.iloc[-1] - group_returns.iloc[0]

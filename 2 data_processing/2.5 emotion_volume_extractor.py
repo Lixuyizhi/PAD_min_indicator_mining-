@@ -98,11 +98,11 @@ def process_emotion_signals(input_file, output_file):
     PAD = np.array([
         [0.85, 0.80, 0.85],    # 喜悦
         [0.75, 0.70, 0.80],    # 兴奋
-        [0.65, -0.35, 0.60],   # 平静
+        [0.65, 0.20, 0.60],    # 平静
         [0.50, 0.85, 0.20],    # 惊讶
-        [0.45, -0.40, 0.25],   # 放松
-        [0.20, -0.45, -0.70],  # 疲倦
-        [-0.25, -0.65, -0.45], # 悲伤
+        [0.45, 0.10, 0.25],    # 放松
+        [0.20, 0.05, -0.70],   # 疲倦
+        [-0.25, 0.00, -0.45],  # 悲伤
         [-0.35, 0.15, -0.35],  # 焦虑
         [-0.40, 0.65, -0.30],  # 愤怒
         [-0.45, 0.20, -0.30],  # 恐惧
@@ -172,8 +172,8 @@ def process_emotion_signals(input_file, output_file):
 
 def main():
     """主函数"""
-    input_dir = '../emo_data/emo_PAD_completed'
-    output_dir = '../emo_data/emo_signals'
+    input_dir = './emo_data/emo_PAD_completed'
+    output_dir = './emo_data/emo_signals'
     
     # 确保输出目录存在
     os.makedirs(output_dir, exist_ok=True)

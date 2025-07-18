@@ -155,22 +155,43 @@ def is_accumulation_period(period_type):
     """判断是否为情绪积累时段"""
     return period_type in ['pre_open', 'post_close', 'overnight', 'break', 'non_trading', 'other']
 
-def process_emotion_data(df):
+def weighted_or_extreme_agg(group, extreme_threshold=80):
     """
-    处理情感数据，实现情绪的衰减和积累效应
+    对同一时间点的多条情绪数据：
+    - 如果有极端情绪（极性或强度绝对值大于阈值），直接保留极端值（取极值那一行）
+    - 否则用强度为权重做加权平均
     """
-    # 创建完整的分钟级时间序列
-    start_dt = pd.to_datetime(df['时间点'].min())
-    end_dt = pd.to_datetime(df['时间点'].max())
-    full_range = pd.date_range(start=start_dt, end=end_dt, freq='min')
+    # 检查极端情绪
+    extreme_rows = group[(group['极性'].abs() > extreme_threshold) | (group['强度'].abs() > extreme_threshold)]
+    if not extreme_rows.empty:
+        # 保留极端值（取极端绝对值最大那一行）
+        idx = (extreme_rows['极性'].abs() + extreme_rows['强度'].abs()).idxmax()
+        return group.loc[idx][['极性', '强度', '支配维度']]
+    else:
+        # 强度加权平均
+        weights = group['强度'].abs().replace(0, 1e-6)  # 避免全为0
+        weighted = np.average(group[['极性', '强度', '支配维度']], axis=0, weights=weights)
+        return pd.Series({'极性': weighted[0], '强度': weighted[1], '支配维度': weighted[2]})
+
+def process_emotion_data(df, resample_rule='1min'):
+    """
+    处理情感数据，实现情绪的衰减和积累效应，支持自定义时间粒度
+    """
+    # 先将原始数据的时间点对齐到指定粒度
+    df['时间点'] = pd.to_datetime(df['时间点']).dt.floor(resample_rule)
+
+    # 用加权平均或极端值保留聚合
+    df = df.groupby('时间点').apply(weighted_or_extreme_agg).reset_index()
+
+    # 创建完整的时间序列（指定粒度）
+    start_dt = df['时间点'].min()
+    end_dt = df['时间点'].max()
+    full_range = pd.date_range(start=start_dt, end=end_dt, freq=resample_rule)
     
     # 创建基础DataFrame
     result_df = pd.DataFrame({'时间点': full_range})
     result_df['period_type'] = result_df['时间点'].apply(get_period_type)
     result_df['is_trading_day'] = result_df['时间点'].apply(is_trading_day)
-    
-    # 将原始数据的时间点转换为datetime
-    df['时间点'] = pd.to_datetime(df['时间点'])
     
     # 合并原始数据
     result_df = pd.merge(result_df, df, on='时间点', how='left')
@@ -180,7 +201,7 @@ def process_emotion_data(df):
         values = []
         prev_value = 0.0
         prev_valid_value = 0.0
-        last_time = result_df['时间点'].iloc[0] - timedelta(minutes=1)
+        last_time = result_df['时间点'].iloc[0] - pd.Timedelta(resample_rule)
         
         for idx in range(len(result_df)):
             current_time = result_df.iloc[idx]['时间点']
@@ -208,7 +229,7 @@ def process_emotion_data(df):
                     weight_new = 0.8  # 非交易日新情绪权重更大
                 else:
                     weight_new = 0.7
-                    
+                
                 combined_value = decayed_prev * (1 - weight_new) + current_value * weight_new
                 
                 # 根据不同情绪维度限制取值范围
@@ -259,7 +280,20 @@ def process_emotion_data(df):
             
             last_time = current_time
         
-        result_df[col] = values
+        # 分段放大极端情绪信号
+        arr = np.array(values)
+        if col in ['极性', '强度']:
+            # 绝对值大于80的极端信号放大1.5倍，50-80之间放大1.2倍
+            mask_extreme = np.abs(arr) > 80
+            mask_strong = (np.abs(arr) > 50) & (np.abs(arr) <= 80)
+            arr[mask_extreme] = arr[mask_extreme] * 1.5
+            arr[mask_strong] = arr[mask_strong] * 1.2
+            # 限制范围
+            if col == '强度':
+                arr = np.clip(arr, 0, 100)
+            else:
+                arr = np.clip(arr, -100, 100)
+        result_df[col] = arr
     
     # 处理开盘时刻的情绪释放
     for col in ['极性', '强度', '支配维度']:
@@ -273,7 +307,6 @@ def process_emotion_data(df):
                     (day.replace(hour=13, minute=30), 0.85),  # 午盘开盘释放85%
                     (day.replace(hour=21, minute=0), 0.75)    # 夜盘开盘释放75%
                 ]
-                
                 for open_time, release_ratio in open_times:
                     mask = result_df['时间点'] == open_time
                     if mask.any():
@@ -284,46 +317,32 @@ def process_emotion_data(df):
                             # 释放积累情绪，保持部分延续性
                             new_value = (current_value * (1 - release_ratio) + 
                                        prev_value * release_ratio)
-                            
-                            # 根据不同情绪维度限制取值范围
                             if col == '强度':
                                 new_value = min(max(new_value, 0), 100)
-                            else:  # 极性和支配度
+                            else:
                                 new_value = min(max(new_value, -100), 100)
-                            
                             result_df.at[idx, col] = new_value
-    
     # 格式化时间输出
     result_df['时间点'] = result_df['时间点'].dt.strftime('%Y/%m/%d %H:%M')
-    
     return result_df[['时间点', '极性', '强度', '支配维度']]
 
-def main():
-    """主函数"""
-    input_file = '../emo_data/emo_PAD/SC_评论分析结果.xlsx'
-    output_dir = '../emo_data/emo_PAD_completed'
+def main(resample_rule='1min'):
+    """主函数，支持自定义粒度"""
+    input_file = './emo_data/emo_PAD/SC_评论分析结果.xlsx'
+    output_dir = './emo_data/emo_PAD_completed'
     os.makedirs(output_dir, exist_ok=True)
-    output_file = os.path.join(output_dir, 'SC_combined_情绪补全.xlsx')
-    
+    output_file = os.path.join(output_dir, f'SC_combined_情绪补全_{resample_rule}.xlsx')
     print(f"开始处理文件: {input_file}")
-    
     try:
-        # 读取数据
         df = pd.read_excel(input_file)
         print(f"原始数据行数: {len(df)}")
         print(f"情绪数据非空值数量: {df['极性'].notna().sum()}")
-        
-        # 处理数据
         start_time = datetime.now()
-        result_df = process_emotion_data(df)
+        result_df = process_emotion_data(df, resample_rule=resample_rule)
         processing_time = datetime.now() - start_time
-        
-        # 保存结果
         result_df.to_excel(output_file, index=False)
         print(f"\n结果已保存至: {output_file}")
         print(f"处理时间: {processing_time}")
-        
-        # 输出统计信息
         print("\n情绪数据统计:")
         for col in ['极性', '强度', '支配维度']:
             print(f"\n{col}:")
@@ -332,8 +351,6 @@ def main():
             print(f"- 数值范围: [{result_df[col].min():.2f}, {result_df[col].max():.2f}]")
             print(f"- 均值: {result_df[col].mean():.2f}")
             print(f"- 标准差: {result_df[col].std():.2f}")
-            
-        # 保存统计信息
         stats_df = pd.DataFrame({
             '指标': ['原始非空值数量', '填充后非空值数量', '最小值', '最大值', '均值', '标准差'],
             '极性': [
@@ -364,7 +381,6 @@ def main():
         stats_file = output_file.replace('.xlsx', '_统计.xlsx')
         stats_df.to_excel(stats_file, index=False)
         print(f"\n统计信息已保存至: {stats_file}")
-        
     except Exception as e:
         print(f"处理文件时发生错误: {str(e)}")
         import traceback
@@ -373,5 +389,6 @@ def main():
 if __name__ == "__main__":
     print("开始情绪数据补全处理...")
     print("="*50)
-    main()
+    # 这里可以自定义粒度，如'1min'、'15min'、'30min'
+    main(resample_rule='15min')
     print("\n处理完成！")
