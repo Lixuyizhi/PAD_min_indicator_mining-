@@ -3,14 +3,19 @@ import pandas as pd
 from pathlib import Path
 import numpy as np
 
-def process_selected_files(input_folder, selected_files=None):
+def process_selected_files(input_folder, selected_files=None, resample_rule='15min'):
     """
-    处理用户选择的多个Excel文件，按分钟级别合并情绪数据
-    采用加权方案处理同一分钟内的多个情绪值
+    处理用户选择的多个Excel文件，按指定时间粒度合并情绪数据
+    采用加权方案处理同一时间窗口内的多个情绪值
+    
+    Args:
+        input_folder: 输入文件夹路径
+        selected_files: 要处理的文件列表，None表示处理所有符合条件的文件
+        resample_rule: 时间粒度，如'1min', '5min', '15min', '30min', '1H'等
     """
     # 配置输出路径
     output_folder = input_folder
-    output_file = output_folder / 'SC_combined_评论分析结果.xlsx'
+    output_file = output_folder / f'SC_combined_评论分析结果_{resample_rule}.xlsx'
 
     # 确保输出文件夹存在
     output_folder.mkdir(parents=True, exist_ok=True)
@@ -53,8 +58,7 @@ def process_selected_files(input_folder, selected_files=None):
             future_name = file_path.stem.replace('_评论分析结果', '')
             df = pd.read_excel(file_path, dtype=dtypes)
             
-            # 添加期货品种
-            df['期货品种'] = future_name
+            
             
             # 计算情绪强度（用于加权）
             df['情绪强度'] = np.abs(df['极性']) * df['强度']
@@ -84,10 +88,10 @@ def process_selected_files(input_folder, selected_files=None):
     # 转换时间列为datetime类型
     combined_df['时间点'] = pd.to_datetime(combined_df['时间点'])
     
-    # 将时间规整到分钟级别
-    combined_df['分钟时间点'] = combined_df['时间点'].dt.floor('min')
+    # 将时间规整到指定粒度
+    combined_df['时间窗口'] = combined_df['时间点'].dt.floor(resample_rule)
 
-    print("\n正在处理相同时间点的数据...")
+    print(f"\n正在处理相同{resample_rule}时间窗口的数据...")
     
     # 定义加权聚合函数
     def weighted_emotion_agg(group):
@@ -124,11 +128,11 @@ def process_selected_files(input_folder, selected_files=None):
             '支配维度': weighted_dominance
         })
 
-    # 按分钟时间点分组并应用加权聚合
-    combined_df = combined_df.groupby('分钟时间点').apply(weighted_emotion_agg).reset_index()
+    # 按时间窗口分组并应用加权聚合
+    combined_df = combined_df.groupby('时间窗口').apply(weighted_emotion_agg).reset_index()
     
     # 重命名时间列并格式化
-    combined_df = combined_df.rename(columns={'分钟时间点': '时间点'})
+    combined_df = combined_df.rename(columns={'时间窗口': '时间点'})
     combined_df['时间点'] = combined_df['时间点'].dt.strftime('%Y/%m/%d %H:%M')
     
     # 重新排列列顺序
@@ -139,6 +143,7 @@ def process_selected_files(input_folder, selected_files=None):
     try:
         combined_df.to_excel(output_file, index=False)
         print(f"数据已保存到: {output_file}")
+        print(f"使用的时间粒度: {resample_rule}")
         
         # 验证PAD值范围
         print("\nPAD值范围验证:")
@@ -158,4 +163,9 @@ if __name__ == "__main__":
         "SC_评论分析结果.xlsx",
         # 添加更多需要处理的文件名...
     ]
-    process_selected_files(input_folder, selected_files)
+    
+    # 可以根据需要修改时间粒度
+    # 常用选项: '1min', '5min', '15min', '30min', '1H', '2H', '4H'
+    resample_rule = '15min'  # 默认15分钟，可以根据需要修改
+    
+    process_selected_files(input_folder, selected_files, resample_rule)

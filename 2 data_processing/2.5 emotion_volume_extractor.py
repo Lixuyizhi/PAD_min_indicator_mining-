@@ -43,30 +43,45 @@ def calculate_emotion_signal(pad_values, emotion_pad_matrix):
     
     weights = softmax(similarities)
     
-    # 定义情绪基准值（与PAD矩阵顺序对应）
+    # 重新定义情绪基准值，更适合中性情绪市场
+    # 调整基准值，使中性情绪有更好的区分度
     emotion_values = np.array([
-        100,   # 喜悦
-        80,    # 兴奋
-        60,    # 平静
-        40,    # 惊讶
-        20,    # 放松
-        0,     # 疲倦
-        -20,   # 悲伤
-        -40,   # 焦虑
-        -60,   # 愤怒
-        -70,   # 恐惧
-        -80,   # 厌恶
-        -90,   # 鄙视
-        -95,   # 失望
-        -100   # 沮丧
+        80,    # 喜悦 (降低)
+        60,    # 兴奋 (降低)
+        40,    # 平静 (降低)
+        20,    # 惊讶 (降低)
+        10,    # 放松 (降低)
+        0,     # 疲倦 (保持)
+        -10,   # 悲伤 (提高)
+        -20,   # 焦虑 (提高)
+        -40,   # 愤怒 (提高)
+        -50,   # 恐惧 (提高)
+        -60,   # 厌恶 (提高)
+        -70,   # 鄙视 (提高)
+        -80,   # 失望 (提高)
+        -90    # 沮丧 (提高)
     ])
     
-    # 计算加权信号量
-    signal = np.sum(weights * emotion_values.reshape(1, -1), axis=1)
+    # 计算基础加权信号量
+    base_signal = np.sum(weights * emotion_values.reshape(1, -1), axis=1)
     
-    # 调整极性的影响
-    pad_polarity = pad_values[:, 0]  # 极性值
-    signal = signal * (1 + pad_polarity * 0.2)  # 极性对信号量有20%的调节作用
+    # 提取PAD值
+    pad_polarity = pad_values[:, 0]  # 极性值 [-1,1]
+    pad_intensity = pad_values[:, 1]  # 强度值 [0,1]
+    pad_dominance = pad_values[:, 2]  # 支配度值 [-1,1]
+    
+    # 直接使用PAD值进行线性调节，增强敏感性
+    # 极性：直接影响信号量的方向
+    polarity_adjustment = pad_polarity * 30  # 极性每0.1变化影响3个信号量单位
+    
+    # 强度：影响信号量的幅度
+    intensity_adjustment = pad_intensity * 20  # 强度每0.1变化影响2个信号量单位
+    
+    # 支配度：影响信号量的稳定性
+    dominance_adjustment = pad_dominance * 15  # 支配度每0.1变化影响1.5个信号量单位
+    
+    # 综合调节
+    signal = base_signal + polarity_adjustment + intensity_adjustment + dominance_adjustment
     
     # 确保信号量在[-100, 100]范围内
     signal = np.clip(signal, -100, 100)
@@ -180,7 +195,7 @@ def main():
     
     # 处理completed文件夹下的所有xlsx文件
     for file in os.listdir(input_dir):
-        if file.endswith('.xlsx') and not file.endswith('_统计.xlsx'):
+        if file.endswith('.xlsx') :
             input_file = os.path.join(input_dir, file)
             output_file = os.path.join(output_dir, file.replace('情绪补全', '情绪信号'))
             process_emotion_signals(input_file, output_file)

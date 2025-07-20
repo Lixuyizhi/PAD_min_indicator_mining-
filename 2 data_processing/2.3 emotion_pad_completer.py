@@ -78,7 +78,7 @@ def calculate_emotion_decay(prev_value, current_value, minutes, period_type):
         'morning': 0.0025,     # 早盘情绪衰减较快
         'break': 0.0008,       # 午休期间情绪衰减缓慢
         'afternoon': 0.0020,   # 午盘情绪衰减适中
-        'post_close': 0.0006,  # 收盘后情绪衰减很慢
+        'post_close': 0.0015,  # 收盘后情绪衰减适中（调整为与pre_open相同）
         'night': 0.0015,       # 夜盘情绪衰减中等
         'overnight': 0.0003,   # 隔夜情绪衰减最慢
         'non_trading': 0.0002, # 非交易日情绪衰减最慢
@@ -90,6 +90,11 @@ def calculate_emotion_decay(prev_value, current_value, minutes, period_type):
     # 非交易日的情绪衰减更慢
     if period_type == 'non_trading':
         decay_rate *= 0.5
+    
+    # 添加平滑过渡机制，避免时段切换时的骤变
+    # 对于短时间间隔（如15分钟），使用更保守的衰减率
+    if minutes <= 30:  # 30分钟内的短时间间隔
+        decay_rate *= 0.7  # 降低衰减率，使过渡更平滑
         
     decayed_value = prev_value * np.exp(-decay_rate * minutes)
     
@@ -119,10 +124,9 @@ def calculate_emotion_accumulation(prev_value, current_value, minutes, period_ty
     4. 非交易日积累更慢但更持久
     """
     accumulation_factors = {
-        'pre_open': 0.018,     # 开盘前积累较快
-        'post_close': 0.012,   # 收盘后积累中等
+        'pre_open': 0.012,     # 开盘前积累适中（降低）
         'overnight': 0.006,    # 隔夜积累最慢
-        'break': 0.015,        # 午休期间积累较快
+        'break': 0.010,        # 午休期间积累适中（降低）
         'non_trading': 0.008,  # 非交易日积累缓慢但持久
         'other': 0.004         # 其他时段保守积累
     }
@@ -133,6 +137,10 @@ def calculate_emotion_accumulation(prev_value, current_value, minutes, period_ty
     if period_type == 'non_trading':
         factor *= 0.8  # 降低积累速度
         minutes = minutes * 0.7  # 降低时间影响
+    
+    # 添加平滑机制，避免短时间内的过度积累
+    if minutes <= 30:  # 30分钟内的短时间间隔
+        factor *= 0.6  # 降低积累因子，使过渡更平滑
         
     base_accumulation = prev_value * (1 + factor * np.log1p(minutes))
     
@@ -153,36 +161,20 @@ def calculate_emotion_accumulation(prev_value, current_value, minutes, period_ty
 
 def is_accumulation_period(period_type):
     """判断是否为情绪积累时段"""
-    return period_type in ['pre_open', 'post_close', 'overnight', 'break', 'non_trading', 'other']
+    return period_type in ['pre_open', 'overnight', 'break', 'non_trading', 'other']
 
-def weighted_or_extreme_agg(group, extreme_threshold=80):
-    """
-    对同一时间点的多条情绪数据：
-    - 如果有极端情绪（极性或强度绝对值大于阈值），直接保留极端值（取极值那一行）
-    - 否则用强度为权重做加权平均
-    """
-    # 检查极端情绪
-    extreme_rows = group[(group['极性'].abs() > extreme_threshold) | (group['强度'].abs() > extreme_threshold)]
-    if not extreme_rows.empty:
-        # 保留极端值（取极端绝对值最大那一行）
-        idx = (extreme_rows['极性'].abs() + extreme_rows['强度'].abs()).idxmax()
-        return group.loc[idx][['极性', '强度', '支配维度']]
-    else:
-        # 强度加权平均
-        weights = group['强度'].abs().replace(0, 1e-6)  # 避免全为0
-        weighted = np.average(group[['极性', '强度', '支配维度']], axis=0, weights=weights)
-        return pd.Series({'极性': weighted[0], '强度': weighted[1], '支配维度': weighted[2]})
-
-def process_emotion_data(df, resample_rule='1min'):
+def process_emotion_data(df, resample_rule='1min', debug=False):
     """
     处理情感数据，实现情绪的衰减和积累效应，支持自定义时间粒度
+    
+    Args:
+        df: 输入数据框
+        resample_rule: 时间粒度
+        debug: 是否输出调试信息
     """
-    # 先将原始数据的时间点对齐到指定粒度
-    df['时间点'] = pd.to_datetime(df['时间点']).dt.floor(resample_rule)
-
-    # 用加权平均或极端值保留聚合
-    df = df.groupby('时间点').apply(weighted_or_extreme_agg).reset_index()
-
+    # 转换时间列为datetime类型
+    df['时间点'] = pd.to_datetime(df['时间点'])
+    
     # 创建完整的时间序列（指定粒度）
     start_dt = df['时间点'].min()
     end_dt = df['时间点'].max()
@@ -195,6 +187,11 @@ def process_emotion_data(df, resample_rule='1min'):
     
     # 合并原始数据
     result_df = pd.merge(result_df, df, on='时间点', how='left')
+    
+    if debug:
+        print(f"创建了完整时间序列，总共 {len(result_df)} 个时间点")
+        print(f"原始数据有 {df['极性'].notna().sum()} 个非空值")
+        print(f"需要补全 {len(result_df) - df['极性'].notna().sum()} 个缺失值")
     
     # 处理每个情绪维度
     for col in ['极性', '强度', '支配维度']:
@@ -209,14 +206,49 @@ def process_emotion_data(df, resample_rule='1min'):
             period_type = result_df.iloc[idx]['period_type']
             is_trading = result_df.iloc[idx]['is_trading_day']
             
-            minutes_diff = (current_time - last_time).total_seconds() / 60
+            # 使用固定的时间间隔进行衰减计算（基于resample_rule）
+            # 因为我们已经创建了完整的时间序列，所以每个时间点间隔都是固定的
+            if resample_rule == '1min':
+                minutes_diff = 1
+            elif resample_rule == '5min':
+                minutes_diff = 5
+            elif resample_rule == '15min':
+                minutes_diff = 15
+            elif resample_rule == '30min':
+                minutes_diff = 30
+            elif resample_rule == '1H':
+                minutes_diff = 60
+            else:
+                # 解析resample_rule，如'2H' -> 120分钟
+                import re
+                match = re.match(r'(\d+)([HhMm])', resample_rule)
+                if match:
+                    num = int(match.group(1))
+                    unit = match.group(2).upper()
+                    if unit == 'H':
+                        minutes_diff = num * 60
+                    elif unit == 'M':
+                        minutes_diff = num
+                    else:
+                        minutes_diff = 15  # 默认15分钟
+                else:
+                    minutes_diff = 15  # 默认15分钟
             
             # 非交易日特殊处理
             if not is_trading:
                 period_type = 'non_trading'
             
+            # 调试：监控时段切换
+            if debug and idx > 0:
+                prev_period = result_df.iloc[idx-1]['period_type']
+                if prev_period != period_type:
+                    print(f"时段切换: {current_time} {prev_period} -> {period_type}")
+            
             if pd.notna(current_value):
                 # 有新情绪数据时的处理
+                if debug:
+                    print(f"处理有数据时间点: {current_time} 值={current_value:.2f} 时段={period_type}")
+                
                 decayed_prev = calculate_emotion_decay(
                     prev_value=prev_valid_value,
                     current_value=current_value,
@@ -238,6 +270,8 @@ def process_emotion_data(df, resample_rule='1min'):
                 else:  # 极性和支配度
                     combined_value = min(max(combined_value, -100), 100)
                 
+                if debug:
+                    print(f"  衰减后: {decayed_prev:.2f} 融合后: {combined_value:.2f}")
                 values.append(combined_value)
                 prev_valid_value = current_value
                 prev_value = combined_value
@@ -245,6 +279,9 @@ def process_emotion_data(df, resample_rule='1min'):
                 # 无新情绪数据时的处理
                 if is_accumulation_period(period_type):
                     # 非交易时段或非交易日，应用积累效应
+                    if debug:
+                        print(f"补全缺失时间点: {current_time} 应用积累 时段={period_type}")
+                    
                     accumulated_value = calculate_emotion_accumulation(
                         prev_value=prev_value,
                         current_value=np.nan,
@@ -258,10 +295,15 @@ def process_emotion_data(df, resample_rule='1min'):
                     else:  # 极性和支配度
                         accumulated_value = min(max(accumulated_value, -100), 100)
                     
+                    if debug:
+                        print(f"  积累后: {accumulated_value:.2f}")
                     values.append(accumulated_value)
                     prev_value = accumulated_value
                 else:
                     # 交易时段，应用衰减效应
+                    if debug:
+                        print(f"补全缺失时间点: {current_time} 应用衰减 时段={period_type}")
+                    
                     decayed_value = calculate_emotion_decay(
                         prev_value=prev_valid_value,
                         current_value=np.nan,
@@ -275,6 +317,8 @@ def process_emotion_data(df, resample_rule='1min'):
                     else:  # 极性和支配度
                         decayed_value = min(max(decayed_value, -100), 100)
                     
+                    if debug:
+                        print(f"  衰减后: {decayed_value:.2f}")
                     values.append(decayed_value)
                     prev_value = decayed_value
             
@@ -326,9 +370,9 @@ def process_emotion_data(df, resample_rule='1min'):
     result_df['时间点'] = result_df['时间点'].dt.strftime('%Y/%m/%d %H:%M')
     return result_df[['时间点', '极性', '强度', '支配维度']]
 
-def main(resample_rule='1min'):
+def main(resample_rule='15min', debug=False):
     """主函数，支持自定义粒度"""
-    input_file = './emo_data/emo_PAD/SC_评论分析结果.xlsx'
+    input_file = f'./emo_data/emo_PAD/SC_combined_评论分析结果_{resample_rule}.xlsx'
     output_dir = './emo_data/emo_PAD_completed'
     os.makedirs(output_dir, exist_ok=True)
     output_file = os.path.join(output_dir, f'SC_combined_情绪补全_{resample_rule}.xlsx')
@@ -338,7 +382,7 @@ def main(resample_rule='1min'):
         print(f"原始数据行数: {len(df)}")
         print(f"情绪数据非空值数量: {df['极性'].notna().sum()}")
         start_time = datetime.now()
-        result_df = process_emotion_data(df, resample_rule=resample_rule)
+        result_df = process_emotion_data(df, resample_rule=resample_rule, debug=debug)
         processing_time = datetime.now() - start_time
         result_df.to_excel(output_file, index=False)
         print(f"\n结果已保存至: {output_file}")
@@ -351,36 +395,6 @@ def main(resample_rule='1min'):
             print(f"- 数值范围: [{result_df[col].min():.2f}, {result_df[col].max():.2f}]")
             print(f"- 均值: {result_df[col].mean():.2f}")
             print(f"- 标准差: {result_df[col].std():.2f}")
-        stats_df = pd.DataFrame({
-            '指标': ['原始非空值数量', '填充后非空值数量', '最小值', '最大值', '均值', '标准差'],
-            '极性': [
-                df['极性'].notna().sum(),
-                result_df['极性'].notna().sum(),
-                result_df['极性'].min(),
-                result_df['极性'].max(),
-                result_df['极性'].mean(),
-                result_df['极性'].std()
-            ],
-            '强度': [
-                df['强度'].notna().sum(),
-                result_df['强度'].notna().sum(),
-                result_df['强度'].min(),
-                result_df['强度'].max(),
-                result_df['强度'].mean(),
-                result_df['强度'].std()
-            ],
-            '支配维度': [
-                df['支配维度'].notna().sum(),
-                result_df['支配维度'].notna().sum(),
-                result_df['支配维度'].min(),
-                result_df['支配维度'].max(),
-                result_df['支配维度'].mean(),
-                result_df['支配维度'].std()
-            ]
-        })
-        stats_file = output_file.replace('.xlsx', '_统计.xlsx')
-        stats_df.to_excel(stats_file, index=False)
-        print(f"\n统计信息已保存至: {stats_file}")
     except Exception as e:
         print(f"处理文件时发生错误: {str(e)}")
         import traceback
@@ -389,6 +403,9 @@ def main(resample_rule='1min'):
 if __name__ == "__main__":
     print("开始情绪数据补全处理...")
     print("="*50)
-    # 这里可以自定义粒度，如'1min'、'15min'、'30min'
-    main(resample_rule='15min')
+    # 这里可以自定义粒度，如'1min'、'5min'、'15min'、'30min'、'1H'、'2H'、'4H'
+    # 注意：这里的粒度应该与2.2文件中的粒度保持一致
+    resample_rule = '15min'  # 默认15分钟，可以根据需要修改
+    debug = False  # 设置为True可以看到详细的处理过程
+    main(resample_rule=resample_rule, debug=debug)
     print("\n处理完成！")
