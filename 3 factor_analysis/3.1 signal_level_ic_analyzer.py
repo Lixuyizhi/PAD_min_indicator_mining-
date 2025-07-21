@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy import stats
 import warnings
+import re
 warnings.filterwarnings('ignore')
 
 # 设置中文字体
@@ -26,6 +27,15 @@ class SignalLevelICAnalyzer:
         self.data_path = data_path
         self.data = None
         self.ic_results = {}
+        # 自动从文件名提取粒度和滞后时间
+        match = re.search(r'_([0-9a-zA-Z]+)_lag(\d+)min', data_path)
+        if match:
+            self.resample_rule = match.group(1)
+            self.lag_minutes = match.group(2)
+        else:
+            self.resample_rule = 'unknown'
+            self.lag_minutes = 'unknown'
+        self.fig_prefix = f"ic_analysis_plot/signal_level_ic_{self.resample_rule}_lag{self.lag_minutes}min"
         
     def load_data(self):
         """加载数据"""
@@ -35,210 +45,183 @@ class SignalLevelICAnalyzer:
         print(f"数据时间范围: {self.data['DateTime'].min()} 到 {self.data['DateTime'].max()}")
         return self.data
     
-    def calculate_interval_ic(self, return_col, method='pearson'):
+    def calculate_global_ic(self, method='pearson'):
         """
-        计算信号等级各区间的IC值
-        
-        Parameters:
-        return_col: str, 收益率列名
-        method: str, 相关系数计算方法
-        
-        Returns:
-        dict: 包含不同区间的IC值
+        计算信号量_等级与未来收益率的全局IC值
         """
-        valid_data = self.data[['信号量_等级', return_col]].dropna()
-        
-        if len(valid_data) == 0:
-            print(f"警告: 信号量_等级 和 {return_col} 之间没有有效数据")
-            return {}
-        
-        # 定义区间
-        negative_mask = (valid_data['信号量_等级'] >= 1) & (valid_data['信号量_等级'] <= 3)
-        neutral_mask = (valid_data['信号量_等级'] >= 4) & (valid_data['信号量_等级'] <= 6)
-        positive_mask = valid_data['信号量_等级'] > 6
-        
-        ic_results = {}
-        
-        # 计算消极情绪区间的IC
-        negative_data = valid_data[negative_mask]
-        if len(negative_data) > 10:
-            if method == 'pearson':
-                ic_results['消极情绪(1-3)'] = negative_data['信号量_等级'].corr(negative_data[return_col])
-            elif method == 'spearman':
-                ic_results['消极情绪(1-3)'] = negative_data['信号量_等级'].corr(negative_data[return_col], method='spearman')
-        else:
-            ic_results['消极情绪(1-3)'] = np.nan
-        
-        # 计算中性情绪区间的IC
-        neutral_data = valid_data[neutral_mask]
-        if len(neutral_data) > 10:
-            if method == 'pearson':
-                ic_results['中性情绪(4-6)'] = neutral_data['信号量_等级'].corr(neutral_data[return_col])
-            elif method == 'spearman':
-                ic_results['中性情绪(4-6)'] = neutral_data['信号量_等级'].corr(neutral_data[return_col], method='spearman')
-        else:
-            ic_results['中性情绪(4-6)'] = np.nan
-        
-        # 计算积极情绪区间的IC
-        positive_data = valid_data[positive_mask]
-        if len(positive_data) > 10:
-            if method == 'pearson':
-                ic_results['积极情绪(>6)'] = positive_data['信号量_等级'].corr(positive_data[return_col])
-            elif method == 'spearman':
-                ic_results['积极情绪(>6)'] = positive_data['信号量_等级'].corr(positive_data[return_col], method='spearman')
-        else:
-            ic_results['积极情绪(>6)'] = np.nan
-        
-        # 计算整体IC
+        results = {}
+        valid_data = self.data[['信号量_等级', 'FutureReturn_1period', 'FutureReturn_5period']].dropna()
         if method == 'pearson':
-            ic_results['整体'] = valid_data['信号量_等级'].corr(valid_data[return_col])
+            ic_1 = valid_data['信号量_等级'].corr(valid_data['FutureReturn_1period'])
+            ic_5 = valid_data['信号量_等级'].corr(valid_data['FutureReturn_5period'])
         elif method == 'spearman':
-            ic_results['整体'] = valid_data['信号量_等级'].corr(valid_data[return_col], method='spearman')
-        
-        return ic_results
-    
-    def analyze_signal_level(self):
-        """分析信号等级因子"""
-        print("开始分析信号等级因子...")
-        
-        returns = ['FutureReturn_1period', 'FutureReturn_5period']
-        
-        for return_col in returns:
-            ic_results = self.calculate_interval_ic(return_col)
-            for interval, ic in ic_results.items():
-                self.ic_results[f"信号量_等级_{interval}_vs_{return_col}"] = ic
-                print(f"信号量_等级_{interval} vs {return_col}: IC = {ic:.4f}")
-        
-        return self.ic_results
-    
-    def plot_interval_analysis(self):
-        """绘制区间分析图表"""
-        if not self.ic_results:
-            print("请先运行 analyze_signal_level()")
-            return
-        
-        fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-        fig.suptitle('信号等级因子IC分析', fontsize=16, fontweight='bold')
-        
-        # 1. 区间IC对比图
-        ax1 = axes[0, 0]
-        intervals = ['消极情绪(1-3)', '中性情绪(4-6)', '积极情绪(>6)', '整体']
-        ic_1period = []
-        ic_5period = []
-        
-        for interval in intervals:
-            ic_1 = self.ic_results.get(f'信号量_等级_{interval}_vs_FutureReturn_1period', np.nan)
-            ic_5 = self.ic_results.get(f'信号量_等级_{interval}_vs_FutureReturn_5period', np.nan)
-            ic_1period.append(ic_1)
-            ic_5period.append(ic_5)
-        
-        x = np.arange(len(intervals))
-        width = 0.35
-        
-        bars1 = ax1.bar(x - width/2, ic_1period, width, label='1期收益率', alpha=0.7, color='skyblue')
-        bars2 = ax1.bar(x + width/2, ic_5period, width, label='5期收益率', alpha=0.7, color='lightcoral')
-        ax1.set_title('不同情绪区间的IC值对比')
-        ax1.set_xlabel('情绪区间')
-        ax1.set_ylabel('IC值')
-        ax1.set_xticks(x)
-        ax1.set_xticklabels(intervals, rotation=45, ha='right')
-        ax1.legend()
-        ax1.axhline(y=0, color='black', linestyle='-', alpha=0.3)
+            ic_1 = valid_data['信号量_等级'].corr(valid_data['FutureReturn_1period'], method='spearman')
+            ic_5 = valid_data['信号量_等级'].corr(valid_data['FutureReturn_5period'], method='spearman')
+        else:
+            raise ValueError('method must be "pearson" or "spearman"')
+        results['信号量_等级_vs_FutureReturn_1period'] = ic_1
+        results['信号量_等级_vs_FutureReturn_5period'] = ic_5
+        self.ic_results = results
+        print(f"信号量_等级_vs_FutureReturn_1period: {ic_1:.4f}")
+        print(f"信号量_等级_vs_FutureReturn_5period: {ic_5:.4f}")
+        return results
+
+    def plot_global_relationship(self):
+        """
+        可视化信号量_等级与1期、5期收益率的关系
+        """
+        valid_data = self.data[['信号量_等级', 'FutureReturn_1period', 'FutureReturn_5period']].dropna()
+        fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+        fig.suptitle('信号量等级与未来收益率关系', fontsize=16, fontweight='bold')
+        # 1. 信号量等级 vs 1期收益率
+        ax1 = axes[0]
+        ax1.scatter(valid_data['信号量_等级'], valid_data['FutureReturn_1period'], alpha=0.5, s=20, color='blue')
+        ax1.set_title('信号量等级 vs 1期收益率')
+        ax1.set_xlabel('信号量等级 (0-10)')
+        ax1.set_ylabel('1期收益率')
         ax1.grid(True, alpha=0.3)
-        
-        # 添加数值标签
-        for bars in [bars1, bars2]:
-            for bar in bars:
-                height = bar.get_height()
-                if not np.isnan(height):
-                    ax1.text(bar.get_x() + bar.get_width()/2., height + (0.01 if height > 0 else -0.01),
-                            f'{height:.3f}', ha='center', va='bottom' if height > 0 else 'top', fontsize=8)
-        
-        # 2. 信号等级分布
-        ax2 = axes[0, 1]
-        signal_counts = self.data['信号量_等级'].value_counts().sort_index()
-        ax2.bar(signal_counts.index, signal_counts.values, color='lightgreen')
-        ax2.set_title('信号等级分布')
-        ax2.set_xlabel('信号等级')
-        ax2.set_ylabel('频次')
-        
-        # 3. 各区间收益率分布
-        ax3 = axes[1, 0]
-        valid_data = self.data[['信号量_等级', 'FutureReturn_1period']].dropna()
-        
-        negative_data = valid_data[(valid_data['信号量_等级'] >= 1) & (valid_data['信号量_等级'] <= 3)]
-        neutral_data = valid_data[(valid_data['信号量_等级'] >= 4) & (valid_data['信号量_等级'] <= 6)]
-        positive_data = valid_data[valid_data['信号量_等级'] > 6]
-        
-        all_data = [negative_data['FutureReturn_1period'], neutral_data['FutureReturn_1period'], 
-                   positive_data['FutureReturn_1period']]
-        labels = ['消极情绪', '中性情绪', '积极情绪']
-        
-        ax3.boxplot(all_data, labels=labels)
-        ax3.set_title('不同情绪区间的收益率分布')
-        ax3.set_ylabel('1期收益率')
-        ax3.grid(True, alpha=0.3)
-        
-        # 4. 散点图（按区间着色）
-        ax4 = axes[1, 1]
-        negative_mask = (valid_data['信号量_等级'] >= 1) & (valid_data['信号量_等级'] <= 3)
-        neutral_mask = (valid_data['信号量_等级'] >= 4) & (valid_data['信号量_等级'] <= 6)
-        positive_mask = valid_data['信号量_等级'] > 6
-        
-        ax4.scatter(valid_data[negative_mask]['信号量_等级'], 
-                   valid_data[negative_mask]['FutureReturn_1period'], 
-                   alpha=0.6, s=20, color='red', label='消极情绪')
-        ax4.scatter(valid_data[neutral_mask]['信号量_等级'], 
-                   valid_data[neutral_mask]['FutureReturn_1period'], 
-                   alpha=0.6, s=20, color='green', label='中性情绪')
-        ax4.scatter(valid_data[positive_mask]['信号量_等级'], 
-                   valid_data[positive_mask]['FutureReturn_1period'], 
-                   alpha=0.6, s=20, color='blue', label='积极情绪')
-        
-        ax4.set_title('信号等级与收益率关系')
-        ax4.set_xlabel('信号等级')
-        ax4.set_ylabel('1期收益率')
-        ax4.legend()
-        ax4.grid(True, alpha=0.3)
-        
+        # 添加趋势线
+        z1 = np.polyfit(valid_data['信号量_等级'], valid_data['FutureReturn_1period'], 1)
+        p1 = np.poly1d(z1)
+        ax1.plot(valid_data['信号量_等级'], p1(valid_data['信号量_等级']), "r--", alpha=0.8, label='趋势线')
+        ax1.legend()
+        # 2. 信号量等级 vs 5期收益率
+        ax2 = axes[1]
+        ax2.scatter(valid_data['信号量_等级'], valid_data['FutureReturn_5period'], alpha=0.5, s=20, color='green')
+        ax2.set_title('信号量等级 vs 5期收益率')
+        ax2.set_xlabel('信号量等级 (0-10)')
+        ax2.set_ylabel('5期收益率')
+        ax2.grid(True, alpha=0.3)
+        # 添加趋势线
+        z5 = np.polyfit(valid_data['信号量_等级'], valid_data['FutureReturn_5period'], 1)
+        p5 = np.poly1d(z5)
+        ax2.plot(valid_data['信号量_等级'], p5(valid_data['信号量_等级']), "r--", alpha=0.8, label='趋势线')
+        ax2.legend()
         plt.tight_layout()
-        plt.savefig('ic_analysis_plot/signal_level_ic_analysis.png', dpi=300, bbox_inches='tight')
-        plt.close()  # 关闭图表，不显示
-    
+        plt.savefig(f'{self.fig_prefix}.png', dpi=300, bbox_inches='tight')
+        plt.close()
+
+    def plot_rolling_ic(self, window=100, method='pearson'):
+        """
+        绘制信号量等级与未来收益率的滚动IC变化曲线，并加均值线
+        """
+        valid_data = self.data[['信号量_等级', 'FutureReturn_1period', 'FutureReturn_5period']].dropna()
+        if valid_data.empty:
+            print("无有效数据用于滚动IC分析！")
+            return
+        rolling_ic_1 = []
+        rolling_ic_5 = []
+        idx = []
+        for i in range(window, len(valid_data)):
+            window_data = valid_data.iloc[i-window:i]
+            if method == 'pearson':
+                ic1 = window_data['信号量_等级'].corr(window_data['FutureReturn_1period'])
+                ic5 = window_data['信号量_等级'].corr(window_data['FutureReturn_5period'])
+            elif method == 'spearman':
+                ic1 = window_data['信号量_等级'].corr(window_data['FutureReturn_1period'], method='spearman')
+                ic5 = window_data['信号量_等级'].corr(window_data['FutureReturn_5period'], method='spearman')
+            else:
+                raise ValueError('method must be "pearson" or "spearman"')
+            rolling_ic_1.append(ic1)
+            rolling_ic_5.append(ic5)
+            idx.append(valid_data.iloc[i].name)
+        # 计算均值
+        mean_ic1 = np.mean(rolling_ic_1)
+        mean_ic5 = np.mean(rolling_ic_5)
+        # 绘图
+        plt.figure(figsize=(12, 6))
+        plt.plot(idx, rolling_ic_1, label='1期收益率滚动IC', color='blue')
+        plt.plot(idx, rolling_ic_5, label='5期收益率滚动IC', color='green')
+        plt.axhline(0, color='black', linestyle='--', alpha=0.5)
+        plt.axhline(mean_ic1, color='blue', linestyle=':', alpha=0.8, label=f'1期IC均值: {mean_ic1:.4f}')
+        plt.axhline(mean_ic5, color='green', linestyle=':', alpha=0.8, label=f'5期IC均值: {mean_ic5:.4f}')
+        plt.title(f'信号量等级与未来收益率的滚动IC（窗口={window}）')
+        plt.xlabel('样本序号')
+        plt.ylabel('IC值')
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig(f'{self.fig_prefix}_rolling.png', dpi=300, bbox_inches='tight')
+        plt.close()
+
+    def plot_rolling_ic_stability(self, window=100, method='pearson'):
+        """
+        绘制滚动IC的稳定性分析图表（均值、标准差、分布直方图）
+        """
+        valid_data = self.data[['信号量_等级', 'FutureReturn_1period', 'FutureReturn_5period']].dropna()
+        if valid_data.empty:
+            print("无有效数据用于滚动IC分析！")
+            return
+        rolling_ic_1 = []
+        rolling_ic_5 = []
+        for i in range(window, len(valid_data)):
+            window_data = valid_data.iloc[i-window:i]
+            if method == 'pearson':
+                ic1 = window_data['信号量_等级'].corr(window_data['FutureReturn_1period'])
+                ic5 = window_data['信号量_等级'].corr(window_data['FutureReturn_5period'])
+            elif method == 'spearman':
+                ic1 = window_data['信号量_等级'].corr(window_data['FutureReturn_1period'], method='spearman')
+                ic5 = window_data['信号量_等级'].corr(window_data['FutureReturn_5period'], method='spearman')
+            else:
+                raise ValueError('method must be "pearson" or "spearman"')
+            rolling_ic_1.append(ic1)
+            rolling_ic_5.append(ic5)
+        # 画图
+        import matplotlib.pyplot as plt
+        fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+        fig.suptitle(f'滚动IC稳定性分析（窗口={window}）', fontsize=16, fontweight='bold')
+        # 1. 1期收益率IC分布
+        axes[0].hist(rolling_ic_1, bins=30, color='skyblue', edgecolor='black', alpha=0.7)
+        axes[0].axvline(np.mean(rolling_ic_1), color='red', linestyle='--', label=f'均值: {np.mean(rolling_ic_1):.4f}')
+        axes[0].axvline(np.mean(rolling_ic_1)+np.std(rolling_ic_1), color='green', linestyle=':', label=f'+1σ: {np.mean(rolling_ic_1)+np.std(rolling_ic_1):.4f}')
+        axes[0].axvline(np.mean(rolling_ic_1)-np.std(rolling_ic_1), color='green', linestyle=':', label=f'-1σ: {np.mean(rolling_ic_1)-np.std(rolling_ic_1):.4f}')
+        axes[0].set_title('1期收益率滚动IC分布')
+        axes[0].set_xlabel('IC值')
+        axes[0].set_ylabel('频次')
+        axes[0].legend()
+        # 2. 5期收益率IC分布
+        axes[1].hist(rolling_ic_5, bins=30, color='lightcoral', edgecolor='black', alpha=0.7)
+        axes[1].axvline(np.mean(rolling_ic_5), color='red', linestyle='--', label=f'均值: {np.mean(rolling_ic_5):.4f}')
+        axes[1].axvline(np.mean(rolling_ic_5)+np.std(rolling_ic_5), color='green', linestyle=':', label=f'+1σ: {np.mean(rolling_ic_5)+np.std(rolling_ic_5):.4f}')
+        axes[1].axvline(np.mean(rolling_ic_5)-np.std(rolling_ic_5), color='green', linestyle=':', label=f'-1σ: {np.mean(rolling_ic_5)-np.std(rolling_ic_5):.4f}')
+        axes[1].set_title('5期收益率滚动IC分布')
+        axes[1].set_xlabel('IC值')
+        axes[1].set_ylabel('频次')
+        axes[1].legend()
+        plt.tight_layout()
+        plt.savefig(f'{self.fig_prefix}_rolling_stability.png', dpi=300, bbox_inches='tight')
+        plt.close()
+
     def generate_report(self):
         """生成分析报告"""
         print("\n" + "="*50)
-        print("信号等级因子IC分析报告")
+        print("信号量等级IC分析报告")
         print("="*50)
-        
         print(f"\n数据概览:")
         print(f"数据时间范围: {self.data['DateTime'].min()} 到 {self.data['DateTime'].max()}")
         print(f"数据总行数: {len(self.data)}")
-        print(f"信号等级分布:")
-        print(self.data['信号量_等级'].value_counts().sort_index())
-        
+        print(f"信号量等级分布:")
+        print(self.data['信号量_等级'].describe())
         print(f"\nIC分析结果:")
-        for factor_return, ic in self.ic_results.items():
-            print(f"{factor_return}: {ic:.4f}")
-        
-        print(f"\n建议:")
+        for k, v in self.ic_results.items():
+            print(f"{k}: {v:.4f}")
         best_ic = max(self.ic_results.values(), key=lambda x: abs(x) if not np.isnan(x) else 0)
         best_factor = [k for k, v in self.ic_results.items() if v == best_ic][0]
-        print(f"最佳IC区间: {best_factor} (IC = {best_ic:.4f})")
-        
+        print(f"\n最佳IC: {best_factor} (IC = {best_ic:.4f})")
         if abs(best_ic) > 0.1:
-            print("该区间显示出较强的预测能力")
+            print("该因子显示出较强的预测能力")
         elif abs(best_ic) > 0.05:
-            print("该区间显示出中等预测能力")
+            print("该因子显示出中等预测能力")
         else:
-            print("该区间预测能力较弱，建议进一步优化")
+            print("该因子预测能力较弱，建议进一步优化")
 
 def main():
     """主函数"""
-    analyzer = SignalLevelICAnalyzer('futures_emo_combined_data/sc2210_with_emotion_lag15min.xlsx')
+    analyzer = SignalLevelICAnalyzer('futures_emo_combined_data/sc2210_with_emotion_1min_lag5min.xlsx')
     analyzer.load_data()
-    analyzer.analyze_signal_level()
-    analyzer.plot_interval_analysis()
+    analyzer.calculate_global_ic()
+    analyzer.plot_global_relationship()
+    analyzer.plot_rolling_ic(window=10000)
+    analyzer.plot_rolling_ic_stability(window=10000) # 新增调用
     analyzer.generate_report()
 
 if __name__ == "__main__":

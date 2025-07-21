@@ -13,7 +13,7 @@ warnings.filterwarnings('ignore')
 # 可以在这里设置时间范围
 START_YEAR = 2024
 END_YEAR = 2024  # 设置为同一个年份表示只需要一年数据
-RESAMPLE_RULE = '15min'  # 新增：聚合粒度，可选'1min'、'15min'、'30min'等
+RESAMPLE_RULE = '1d'  # 新增：聚合粒度，可选'1min'、'15min'、'30min'等
 
 
 # ======================== 核心函数 ========================

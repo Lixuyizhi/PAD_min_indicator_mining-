@@ -372,10 +372,10 @@ def process_emotion_data(df, resample_rule='1min', debug=False):
 
 def main(resample_rule='15min', debug=False):
     """主函数，支持自定义粒度"""
-    input_file = f'./emo_data/emo_PAD/SC_combined_评论分析结果_{resample_rule}.xlsx'
+    input_file = f'./emo_data/emo_PAD/SC_combined_评论分析结果_{resample_rule}.xlsx' # 注意更改
     output_dir = './emo_data/emo_PAD_completed'
     os.makedirs(output_dir, exist_ok=True)
-    output_file = os.path.join(output_dir, f'SC_combined_情绪补全_{resample_rule}.xlsx')
+    output_file = os.path.join(output_dir, f'SC_combined_情绪补全_{resample_rule}.xlsx') # 注意更改
     print(f"开始处理文件: {input_file}")
     try:
         df = pd.read_excel(input_file)
@@ -405,7 +405,7 @@ if __name__ == "__main__":
     print("="*50)
     # 这里可以自定义粒度，如'1min'、'5min'、'15min'、'30min'、'1H'、'2H'、'4H'
     # 注意：这里的粒度应该与2.2文件中的粒度保持一致
-    resample_rule = '15min'  # 默认15分钟，可以根据需要修改
+    resample_rule = '1h'  
     debug = False  # 设置为True可以看到详细的处理过程
     main(resample_rule=resample_rule, debug=debug)
     print("\n处理完成！")
