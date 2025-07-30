@@ -66,6 +66,45 @@ class SignalLevelICAnalyzer:
         print(f"信号量_等级_vs_FutureReturn_5period: {ic_5:.4f}")
         return results
 
+    def get_recommended_window(self):
+        """
+        根据数据粒度直接推荐合适的窗口大小
+        """
+        print("根据数据粒度推荐窗口大小...")
+        
+        # 从文件名提取粒度信息
+        if self.resample_rule == '1min':
+            # 1分钟数据：推荐2-3小时的窗口
+            recommended_window = 120
+            print(f"1分钟粒度数据，推荐窗口: {recommended_window} (约4小时)")
+        elif self.resample_rule == '15min':
+            # 15分钟数据：推荐1-2天的窗口
+            recommended_window = 144
+            print(f"15分钟粒度数据，推荐窗口: {recommended_window} (约26小时)")
+        elif self.resample_rule == '30min':
+            # 30分钟数据：推荐2-3天的窗口
+            recommended_window = 200   
+            print(f"30分钟粒度数据，推荐窗口: {recommended_window} (约24小时)")
+        elif self.resample_rule == '1h':
+            # 1小时数据：推荐5-8天的窗口
+            recommended_window = 400
+            print(f"1小时粒度数据，推荐窗口: {recommended_window} (约40小时)")
+        else:
+            # 默认窗口
+            recommended_window = 100
+            print(f"未知粒度，使用默认窗口: {recommended_window}")
+        
+        # 检查数据量是否足够
+        valid_data = self.data[['信号量_等级', 'FutureReturn_1period', 'FutureReturn_5period']].dropna()
+        if len(valid_data) < recommended_window * 2:
+            # 如果数据量不足，调整窗口大小
+            recommended_window = len(valid_data) // 3
+            print(f"数据量不足，调整窗口为: {recommended_window}")
+        
+        return recommended_window
+    
+
+
     def plot_global_relationship(self):
         """
         可视化信号量_等级与1期、5期收益率的关系
@@ -216,12 +255,21 @@ class SignalLevelICAnalyzer:
 
 def main():
     """主函数"""
-    analyzer = SignalLevelICAnalyzer('futures_emo_combined_data/sc2210_with_emotion_1min_lag5min.xlsx')
+    analyzer = SignalLevelICAnalyzer('futures_emo_combined_data/sc2210_with_emotion_1h_lag180min.xlsx')
     analyzer.load_data()
     analyzer.calculate_global_ic()
     analyzer.plot_global_relationship()
-    analyzer.plot_rolling_ic(window=10000)
-    analyzer.plot_rolling_ic_stability(window=10000) # 新增调用
+    
+    # 根据数据粒度推荐窗口
+    print("\n" + "="*50)
+    print("滚动IC窗口推荐")
+    print("="*50)
+    recommended_window = analyzer.get_recommended_window()
+    
+    # 使用推荐的窗口
+    print(f"\n使用推荐窗口大小: {recommended_window}")
+    analyzer.plot_rolling_ic(window=recommended_window)
+    analyzer.plot_rolling_ic_stability(window=recommended_window)
     analyzer.generate_report()
 
 if __name__ == "__main__":

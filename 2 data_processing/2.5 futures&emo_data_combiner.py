@@ -2,7 +2,7 @@ import pandas as pd
 import os
 
 # 可配置参数
-LAG_MINUTES = 60 # 滞后时间（分钟）
+LAG_MINUTES = 180 # 滞后时间（分钟）
 RESAMPLE_RULE = '1h'  # 新增：数据粒度，可选'1min'、'15min'、'30min'、'1h'等
 OUTPUT_PATH = f"./futures_emo_combined_data/sc2210_with_emotion_{RESAMPLE_RULE}_lag{LAG_MINUTES}min.xlsx"
 EMOTION_COLUMNS = ['极性', '强度', '支配维度', '信号量', '信号量_等级']  # 选择需要合并的情绪特征列
