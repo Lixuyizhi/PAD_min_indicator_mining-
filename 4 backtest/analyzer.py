@@ -88,12 +88,14 @@ class BacktestAnalyzer:
         fig.suptitle(f'信号量等级策略回测结果 ({data_info["resample_rule"]}粒度, 滞后{data_info["lag_minutes"]}分钟)', 
                     fontsize=16, fontweight='bold')
         
-        # 1. 价格走势
+        # 1. 价格走势和交易点
         ax1 = axes[0, 0]
-        cerebro.plot(style='candlestick', barup='red', bardown='green', 
-                     volume=False, numfigs=1, iplot=False, ax=ax1)
+        # 绘制价格走势
+        ax1.plot(df.index, df['Close'], label='收盘价', color='blue', alpha=0.7)
         ax1.set_title('价格走势')
         ax1.set_ylabel('价格')
+        ax1.legend()
+        ax1.grid(True, alpha=0.3)
         
         # 2. 信号量等级分布
         ax2 = axes[0, 1]
@@ -104,30 +106,34 @@ class BacktestAnalyzer:
         ax2.set_ylabel('频次')
         ax2.legend()
         
-        # 3. 收益率分布
+        # 3. 信号量等级时间序列
         ax3 = axes[1, 0]
+        ax3.plot(df.index, df['信号量_等级'], label='信号量等级', color='green', alpha=0.7)
+        ax3.axhline(5.0, color='red', linestyle='--', label='信号阈值')
+        ax3.set_title('信号量等级时间序列')
+        ax3.set_xlabel('时间')
+        ax3.set_ylabel('信号量等级')
+        ax3.legend()
+        ax3.grid(True, alpha=0.3)
+        
+        # 4. 收益率分布
+        ax4 = axes[1, 1]
         if hasattr(results.analyzers, 'trades'):
             trades = results.analyzers.trades.get_analysis()
-            if 'pnl' in trades:
+            if 'pnl' in trades and len(trades['pnl']) > 0:
                 pnls = trades['pnl']
-                ax3.hist(pnls, bins=20, alpha=0.7, color='green', edgecolor='black')
-                ax3.axvline(0, color='red', linestyle='--', label='盈亏平衡线')
-                ax3.set_title('交易盈亏分布')
-                ax3.set_xlabel('盈亏')
-                ax3.set_ylabel('频次')
-                ax3.legend()
-        
-        # 4. 回撤曲线
-        ax4 = axes[1, 1]
-        if hasattr(results.analyzers, 'drawdown'):
-            drawdown = results.analyzers.drawdown.get_analysis()
-            if 'drawdown' in drawdown:
-                dd_series = drawdown['drawdown']
-                ax4.plot(dd_series, color='red', alpha=0.7)
-                ax4.set_title('回撤曲线')
-                ax4.set_xlabel('时间')
-                ax4.set_ylabel('回撤比例')
-                ax4.grid(True, alpha=0.3)
+                ax4.hist(pnls, bins=20, alpha=0.7, color='green', edgecolor='black')
+                ax4.axvline(0, color='red', linestyle='--', label='盈亏平衡线')
+                ax4.set_title('交易盈亏分布')
+                ax4.set_xlabel('盈亏')
+                ax4.set_ylabel('频次')
+                ax4.legend()
+            else:
+                ax4.text(0.5, 0.5, '暂无交易数据', ha='center', va='center', transform=ax4.transAxes)
+                ax4.set_title('交易盈亏分布')
+        else:
+            ax4.text(0.5, 0.5, '暂无交易数据', ha='center', va='center', transform=ax4.transAxes)
+            ax4.set_title('交易盈亏分布')
         
         plt.tight_layout()
         

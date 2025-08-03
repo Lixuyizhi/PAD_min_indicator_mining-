@@ -53,13 +53,18 @@ def run_custom_parameters_backtest():
         output_dir='backtest_results'
     )
     
-    # 自定义策略参数
+    # 自定义策略参数 - 更宽松的设置
     custom_params = {
-        'signal_threshold': 5.5,  # 更高的信号阈值
-        'position_size': 0.15,    # 更大的仓位
-        'stop_loss': 0.025,       # 更宽松的止损
-        'take_profit': 0.05,      # 更高的止盈
-        'max_holding_periods': 3  # 更短的持仓期
+        'signal_threshold': 5.0,      # 信号阈值
+        'position_size': 0.1,         # 仓位大小
+        'stop_loss': 0.02,            # 止损比例
+        'take_profit': 0.04,          # 止盈比例
+        'max_holding_periods': 5,     # 最大持仓期数
+        'min_signal_strength': 0.5,   # 最小信号强度（更宽松）
+        'trend_filter': False,        # 关闭趋势过滤
+        'momentum_filter': False,     # 关闭动量过滤
+        'volatility_filter': False,   # 关闭波动率过滤
+        'use_volume_filter': False    # 关闭成交量过滤
     }
     
     # 运行回测
@@ -95,7 +100,7 @@ def run_parameter_optimization_only():
 
 if __name__ == "__main__":
     # 选择要运行的测试类型
-    test_type = "basic"  # 可选: "basic", "optimized", "custom", "optimization_only"
+    test_type = "custom"  # 可选: "basic", "optimized", "custom", "optimization_only"
     
     if test_type == "basic":
         run_basic_backtest()
