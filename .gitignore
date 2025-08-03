@@ -3,13 +3,13 @@
 /futures_data
 /futures_emo_combined_data
 /pictures
-
+backtest_results/
 # Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-
+3 factor_analysis/ic_half_life_demo.py
 # Jupyter
 .ipynb_checkpoints/
 record.ipynb

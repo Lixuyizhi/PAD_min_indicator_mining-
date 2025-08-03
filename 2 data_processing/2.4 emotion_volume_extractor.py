@@ -22,6 +22,26 @@ def normalize_pad_values(df):
     
     return df_normalized
 
+def standardize_pad_values(df):
+    """
+    标准化PAD值（均值为0，标准差为1）
+    注意：这会改变原始PAD值的分布特征
+    
+    参数:
+    df: 包含PAD值的DataFrame
+    
+    返回:
+    df_standardized: 标准化后的DataFrame
+    """
+    df_standardized = df.copy()
+    
+    # 标准化处理
+    df_standardized['极性'] = (df['极性'] - df['极性'].mean()) / df['极性'].std()
+    df_standardized['强度'] = (df['强度'] - df['强度'].mean()) / df['强度'].std()
+    df_standardized['支配维度'] = (df['支配维度'] - df['支配维度'].mean()) / df['支配维度'].std()
+    
+    return df_standardized
+
 def calculate_emotion_signal(pad_values, emotion_pad_matrix):
     """
     计算情绪信号量
