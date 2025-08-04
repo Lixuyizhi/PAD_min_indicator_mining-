@@ -1,147 +1,203 @@
-# 信号量等级因子回测系统
+# 统一回测系统
 
-基于IC分析结果构建的backtrader回测系统，专门用于信号量等级因子的回测分析。
+基于backtrader的统一回测系统，支持多种策略：原始信号量策略、情绪极值策略、情绪动量策略、情绪分层策略。
 
 ## 系统架构
 
 系统采用模块化设计，包含以下核心模块：
 
-### 1. 策略模块 (`strategy.py`)
-- **SignalLevelStrategy**: 基于信号量等级的交易策略
-- 根据IC分析结果，信号量等级与5期收益率有负相关关系
-- 支持多空双向交易，包含止损止盈机制
+### 1. 策略模块
+- **SignalLevelStrategy** (`strategy.py`): 原始信号量等级策略
+- **EmotionExtremeStrategy** (`emotion_extreme_strategy.py`): 情绪极值策略
+- **EmotionMomentumStrategy** (`emotion_momentum_strategy.py`): 情绪动量策略
+- **EmotionLayeredStrategy** (`emotion_layered_strategy.py`): 情绪分层策略
 
-### 2. 数据加载模块 (`data_loader.py`)
-- **DataLoader**: 数据加载和预处理
-- **SignalLevelData**: backtrader自定义数据源
-- 自动从文件名提取数据粒度和滞后时间信息
+### 2. 统一回测运行器 (`run_backtest.py`)
+- **UnifiedBacktestRunner**: 统一回测运行器
+- 支持多种策略选择和参数配置
+- 自动比较不同策略的表现
 
-### 3. 分析器模块 (`analyzer.py`)
-- **BacktestAnalyzer**: 回测结果分析和可视化
-- 生成综合回测报告和图表
-- 支持多种性能指标分析
+### 3. 辅助模块
+- **DataLoader** (`data_loader.py`): 数据加载和预处理
+- **BacktestAnalyzer** (`analyzer.py`): 回测结果分析
+- **ParameterOptimizer** (`optimizer.py`): 参数优化
+- **BacktestPlatform** (`backtest_platform.py`): 原有回测平台
 
-### 4. 参数优化模块 (`optimizer.py`)
-- **ParameterOptimizer**: 策略参数优化
-- 支持网格搜索和参数组合测试
-- 提供默认和扩展参数范围
+## 策略说明
 
-### 5. 主平台模块 (`backtest_platform.py`)
-- **BacktestPlatform**: 回测平台主类
-- 整合所有模块功能
-- 提供简洁的API接口
+### 1. 原始信号量策略 (original)
+- **描述**: 基于信号量等级的传统策略，使用布林带等技术指标过滤
+- **适用场景**: 信号量等级与收益率有明确相关关系
+- **核心逻辑**: 信号量等级高于阈值做空，低于阈值做多
+
+### 2. 情绪极值策略 (extreme)
+- **描述**: 在情绪极值处进行反向交易
+- **适用场景**: 情绪信号有明显的极值分布
+- **核心逻辑**: 
+  - 极低情绪(1-2.5)：做多（恐慌时买入）
+  - 极高情绪(7.5-10)：做空（亢奋时卖出）
+  - 中性情绪(2.5-7.5)：不交易
+
+### 3. 情绪动量策略 (momentum)
+- **描述**: 基于情绪变化趋势进行交易
+- **适用场景**: 情绪信号变化较为频繁，有明显的趋势性
+- **核心逻辑**:
+  - 情绪从低向高转变：做多
+  - 情绪从高向低转变：做空
+  - 避免在极值情绪时交易
+
+### 4. 情绪分层策略 (layered)
+- **描述**: 将情绪分为5个层次，不同层次采用不同策略
+- **适用场景**: 情绪信号分布较为均匀，需要精细化管理
+- **核心逻辑**:
+  - 极低情绪(1-2)：做多
+  - 低情绪(2-4)：情绪改善时做多
+  - 中性情绪(4-6)：不交易或小仓位
+  - 高情绪(6-8)：情绪恶化时做空
+  - 极高情绪(8-10)：做空
 
 ## 使用方法
 
-### 基础回测
-
-```python
-from backtest_platform import BacktestPlatform
-
-# 创建回测平台
-platform = BacktestPlatform(
-    data_path='futures_emo_combined_data/sc2210_with_emotion_1h_lag180min.xlsx',
-    output_dir='backtest_results'
-)
-
-# 运行回测
-cerebro, results = platform.run_backtest()
-```
-
-### 自定义参数回测
-
-```python
-# 自定义策略参数
-custom_params = {
-    'signal_threshold': 5.5,  # 信号阈值
-    'position_size': 0.15,    # 仓位大小
-    'stop_loss': 0.025,       # 止损比例
-    'take_profit': 0.05,      # 止盈比例
-    'max_holding_periods': 3  # 最大持仓期数
-}
-
-# 运行回测
-cerebro, results = platform.run_backtest(strategy_params=custom_params)
-```
-
-### 参数优化
-
-```python
-# 运行参数优化回测
-cerebro, results = platform.run_optimized_backtest()
-
-# 或者仅进行参数优化
-best_params, results_df = platform.optimize_parameters()
-```
-
-### 命令行使用
+### 1. 命令行使用
 
 ```bash
-# 基础回测
-python backtest_platform.py --data_path "your_data_file.xlsx"
+# 显示策略信息
+python run_backtest.py --info
 
-# 参数优化
-python backtest_platform.py --optimize
+# 运行所有策略
+python run_backtest.py --strategy all
 
-# 扩展参数优化
-python backtest_platform.py --extended_optimize
+# 运行指定策略
+python run_backtest.py --strategy extreme
+
+# 指定数据文件
+python run_backtest.py --data_path "your_data_file.xlsx" --strategy momentum
+
+# 指定输出目录
+python run_backtest.py --strategy layered --output_dir "my_results"
 ```
 
-## 策略参数说明
+### 2. Python代码使用
 
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| signal_threshold | 5.0 | 信号阈值，高于此值做空，低于此值做多 |
-| position_size | 0.1 | 仓位大小 |
-| stop_loss | 0.02 | 止损比例 |
-| take_profit | 0.04 | 止盈比例 |
-| max_holding_periods | 5 | 最大持仓期数 |
-| use_volume_filter | True | 是否使用成交量过滤 |
-| volume_threshold | 1.5 | 成交量阈值倍数 |
+```python
+from run_backtest import UnifiedBacktestRunner
+
+# 创建回测运行器
+runner = UnifiedBacktestRunner('your_data_file.xlsx')
+
+# 显示策略信息
+runner.show_strategy_info()
+
+# 运行单个策略
+cerebro, results = runner.run_strategy('extreme')
+
+# 运行所有策略
+results = runner.run_all_strategies()
+
+# 自定义参数运行策略
+custom_params = {
+    'low_threshold': 2.0,
+    'high_threshold': 8.0,
+    'position_size': 0.15
+}
+cerebro, results = runner.run_strategy('extreme', custom_params)
+```
+
+### 3. 策略选择建议
+
+根据您的数据特点选择策略：
+
+1. **如果情绪信号经常出现极值（1-2或8-9）**：
+   - 推荐使用：情绪极值策略 (`extreme`)
+   - 优势：简单直接，容易理解
+
+2. **如果情绪信号变化频繁，有明显趋势**：
+   - 推荐使用：情绪动量策略 (`momentum`)
+   - 优势：能捕捉情绪反转点
+
+3. **如果情绪信号分布相对均匀**：
+   - 推荐使用：情绪分层策略 (`layered`)
+   - 优势：精细化管理，适应性强
+
+4. **如果信号量等级与收益率有明确相关关系**：
+   - 推荐使用：原始信号量策略 (`original`)
+   - 优势：基于IC分析结果，逻辑清晰
+
+## 数据要求
+
+您的数据需要包含以下列：
+- `datetime`: 时间戳
+- `open`, `high`, `low`, `close`: 价格数据
+- `volume`: 成交量
+- `signal_level`: 情绪信号等级（0-10）
+
+系统会自动识别以下列名：
+- `信号量_等级` → `signal_level`
+- `Signal_Level` → `signal_level`
+- `signal_level` → `signal_level`
 
 ## 输出结果
 
 ### 控制台输出
-- 回测进度和状态信息
+- 数据加载信息
+- 策略运行进度
 - 策略统计指标
-- 参数优化结果
-
-### 图表输出
-- 价格走势图
-- 信号量等级分布图
-- 交易盈亏分布图
-- 回撤曲线图
+- 策略结果比较
 
 ### 文件输出
-- 回测结果图表 (PNG格式)
-- 参数优化结果 (CSV格式)
+- 每个策略的结果保存在独立目录
+- 参数配置文件 (`parameters.txt`)
+- 策略比较结果 (`strategy_comparison.txt`)
 
-## 性能指标
+### 结果分析
+系统会自动比较不同策略的表现：
+- 总收益率
+- 最终资金
+- 交易次数
+- 胜率
 
-系统提供以下性能指标：
+## 参数配置
 
-- **总收益率**: 回测期间的总收益
-- **夏普比率**: 风险调整后收益
-- **最大回撤**: 最大资金回撤比例
-- **胜率**: 盈利交易占比
-- **交易次数**: 总交易次数
-- **年化收益率**: 年化收益率
+### 原始信号量策略参数
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| signal_threshold | 5.0 | 信号阈值 |
+| position_size | 0.1 | 仓位大小 |
+| stop_loss | 0.02 | 止损比例 |
+| take_profit | 0.04 | 止盈比例 |
+| max_holding_periods | 5 | 最大持仓期数 |
 
-## 示例脚本
+### 情绪极值策略参数
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| low_threshold | 2.5 | 低情绪阈值 |
+| high_threshold | 7.5 | 高情绪阈值 |
+| min_extreme_duration | 2 | 极值持续最小期数 |
+| use_volume_confirmation | True | 是否使用成交量确认 |
 
-`run_backtest.py` 提供了多种使用示例：
+### 情绪动量策略参数
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| momentum_period | 5 | 动量计算周期 |
+| signal_change_threshold | 0.5 | 信号变化阈值 |
+| min_signal_level | 3.0 | 最小信号等级 |
+| max_signal_level | 7.0 | 最大信号等级 |
 
-1. **基础回测**: 使用默认参数运行回测
-2. **参数优化回测**: 自动优化参数后运行回测
-3. **自定义参数回测**: 使用自定义参数运行回测
-4. **仅参数优化**: 只进行参数优化，不运行回测
+### 情绪分层策略参数
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| extreme_low_threshold | 2.0 | 极低情绪阈值 |
+| low_threshold | 4.0 | 低情绪阈值 |
+| high_threshold | 6.0 | 高情绪阈值 |
+| extreme_high_threshold | 8.0 | 极高情绪阈值 |
 
 ## 注意事项
 
-1. 确保数据文件包含必要的列：`Open`, `High`, `Low`, `Close`, `Volume`, `信号量_等级`
-2. 数据文件命名格式：`*_粒度_lag滞后时间min.xlsx`
-3. 参数优化可能需要较长时间，建议先用小范围参数测试
-4. 回测结果仅供参考，实际交易需要考虑更多因素
+1. **数据质量**: 确保情绪信号数据的质量和连续性
+2. **策略选择**: 根据数据特点选择合适的策略
+3. **参数调优**: 可以通过自定义参数优化策略表现
+4. **风险控制**: 合理设置止损止盈，控制单次交易风险
+5. **过拟合风险**: 避免过度优化参数，建议使用样本外测试
 
 ## 依赖库
 
@@ -155,12 +211,37 @@ python backtest_platform.py --extended_optimize
 
 ```
 4 backtest/
-├── backtest_platform.py    # 主回测平台
-├── strategy.py             # 策略模块
-├── data_loader.py          # 数据加载模块
-├── analyzer.py             # 分析器模块
-├── optimizer.py            # 参数优化模块
-├── run_backtest.py         # 示例脚本
-├── README.md              # 说明文档
-└── backtest_results/      # 结果输出目录
-``` 
+├── run_backtest.py                    # 统一回测运行脚本
+├── strategy.py                        # 原始信号量策略
+├── emotion_extreme_strategy.py        # 情绪极值策略
+├── emotion_momentum_strategy.py       # 情绪动量策略
+├── emotion_layered_strategy.py        # 情绪分层策略
+├── data_loader.py                     # 数据加载模块
+├── analyzer.py                        # 分析器模块
+├── optimizer.py                       # 参数优化模块
+├── backtest_platform.py               # 原有回测平台
+├── test_multiple_strategies.py        # 多策略测试脚本
+├── _README.md                         # 说明文档
+└── backtest_results/                  # 结果输出目录
+```
+
+## 示例用法
+
+```bash
+# 1. 查看所有可用策略
+python run_backtest.py --info
+
+# 2. 运行所有策略并比较结果
+python run_backtest.py --strategy all
+
+# 3. 只运行情绪极值策略
+python run_backtest.py --strategy extreme
+
+# 4. 使用自定义数据文件
+python run_backtest.py --data_path "my_data.xlsx" --strategy momentum
+
+# 5. 指定输出目录
+python run_backtest.py --strategy layered --output_dir "my_results"
+```
+
+通过这个统一的回测系统，您可以方便地比较不同策略的表现，选择最适合您数据特点的策略进行交易。 
