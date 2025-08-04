@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-布林带策略回测运行脚本
-支持选择不同的数据文件和参数配置
+纯布林带策略回测运行脚本
 """
 
 import backtrader as bt
@@ -26,7 +25,7 @@ plt.rcParams['axes.unicode_minus'] = False
 class BollingerBacktestRunner:
     """布林带策略回测运行器"""
     
-    def __init__(self, data_path, output_dir='backtest_results'):
+    def __init__(self, data_path, output_dir='bollinger_results'):
         """
         初始化回测运行器
         
@@ -67,7 +66,7 @@ class BollingerBacktestRunner:
             default_params.update(strategy_params)
         
         print("="*60)
-        print("布林带策略回测开始")
+        print("纯布林带策略回测开始")
         print("="*60)
         print(f"数据文件: {self.data_path}")
         print(f"策略参数: {default_params}")
@@ -134,96 +133,14 @@ class BollingerBacktestRunner:
                 f.write(f"{key}: {value}\n")
         
         print(f"参数配置已保存到: {param_file}")
-    
-    def run_parameter_optimization(self, param_ranges):
-        """
-        运行参数优化
-        
-        Parameters:
-        param_ranges: dict, 参数范围字典
-        
-        Returns:
-        pd.DataFrame: 优化结果
-        """
-        print("开始参数优化...")
-        
-        results = []
-        
-        # 生成参数组合
-        import itertools
-        param_names = list(param_ranges.keys())
-        param_values = list(param_ranges.values())
-        
-        total_combinations = np.prod([len(vals) for vals in param_values])
-        print(f"总共需要测试 {total_combinations} 种参数组合")
-        
-        for i, param_combination in enumerate(itertools.product(*param_values)):
-            params = dict(zip(param_names, param_combination))
-            
-            print(f"测试参数组合 {i+1}/{total_combinations}: {params}")
-            
-            try:
-                cerebro, results_obj, data_info = self.run_backtest(params)
-                
-                # 提取结果
-                final_value = cerebro.broker.getvalue()
-                initial_value = 100000.0
-                total_return = (final_value - initial_value) / initial_value
-                
-                # 获取分析器结果
-                sharpe = results_obj.analyzers.sharpe.get_analysis()
-                sharpe_ratio = sharpe.get('sharperatio', 0)
-                
-                drawdown = results_obj.analyzers.drawdown.get_analysis()
-                max_dd = drawdown.get('max', {}).get('drawdown', 0)
-                
-                trades = results_obj.analyzers.trades.get_analysis()
-                total_trades = trades.get('total', {}).get('total', 0)
-                won_trades = trades.get('won', {}).get('total', 0)
-                win_rate = won_trades / total_trades if total_trades > 0 else 0
-                
-                # 保存结果
-                result_row = {
-                    'total_return': total_return,
-                    'final_value': final_value,
-                    'sharpe_ratio': sharpe_ratio,
-                    'max_drawdown': max_dd,
-                    'total_trades': total_trades,
-                    'win_rate': win_rate,
-                    **params
-                }
-                results.append(result_row)
-                
-            except Exception as e:
-                print(f"参数组合 {params} 运行失败: {e}")
-                continue
-        
-        # 转换为DataFrame
-        results_df = pd.DataFrame(results)
-        
-        # 保存优化结果
-        data_info = self.data_loader.get_data_info()
-        self.analyzer.save_optimization_results(results_df, data_info)
-        
-        # 显示最佳结果
-        if not results_df.empty:
-            print("\n最佳参数组合:")
-            best_idx = results_df['total_return'].idxmax()
-            best_params = results_df.loc[best_idx]
-            print(f"总收益率: {best_params['total_return']:.2%}")
-            print(f"夏普比率: {best_params['sharpe_ratio']:.3f}")
-            print(f"最大回撤: {best_params['max_drawdown']:.2%}")
-            print(f"胜率: {best_params['win_rate']:.2%}")
-            print("参数:", {k: v for k, v in best_params.items() if k not in ['total_return', 'final_value', 'sharpe_ratio', 'max_drawdown', 'total_trades', 'win_rate']})
-        
-        return results_df
 
 def main():
     """主函数"""
-    parser = argparse.ArgumentParser(description='布林带策略回测')
-    parser.add_argument('--data_path', type=str, required=True, 
-                       help='数据文件路径')
-    parser.add_argument('--output_dir', type=str, default='backtest_results',
+    parser = argparse.ArgumentParser(description='纯布林带策略回测')
+    parser.add_argument('--data_path', type=str, 
+                       default='../futures_emo_combined_data/sc2210_with_emotion_1h_lag120min.xlsx',
+                       help='数据文件路径 (默认: ../futures_emo_combined_data/sc2210_with_emotion_1h_lag120min.xlsx)')
+    parser.add_argument('--output_dir', type=str, default='bollinger_results',
                        help='输出目录')
     parser.add_argument('--boll_period', type=int, default=20,
                        help='布林带周期')
@@ -237,35 +154,38 @@ def main():
                        help='止盈比例')
     parser.add_argument('--max_holding_periods', type=int, default=10,
                        help='最大持仓期数')
-    parser.add_argument('--optimize', action='store_true',
-                       help='是否进行参数优化')
     
     args = parser.parse_args()
+    
+    # 检查数据文件是否存在
+    if not os.path.exists(args.data_path):
+        print(f"错误: 数据文件不存在: {args.data_path}")
+        print("可用的数据文件:")
+        data_dir = "../futures_emo_combined_data"
+        if os.path.exists(data_dir):
+            files = [f for f in os.listdir(data_dir) if f.endswith('.xlsx')]
+            files.sort()  # 按文件名排序
+            for file in files:
+                print(f"  - {os.path.join(data_dir, file)}")
+        else:
+            print(f"数据目录不存在: {data_dir}")
+        sys.exit(1)
     
     # 创建回测运行器
     runner = BollingerBacktestRunner(args.data_path, args.output_dir)
     
-    if args.optimize:
-        # 参数优化
-        param_ranges = {
-            'boll_period': [10, 15, 20, 25, 30],
-            'boll_dev': [1.5, 2.0, 2.5],
-            'position_size': [0.05, 0.1, 0.15],
-            'stop_loss': [0.015, 0.02, 0.025],
-            'take_profit': [0.03, 0.04, 0.05],
-        }
-        runner.run_parameter_optimization(param_ranges)
-    else:
-        # 单次回测
-        strategy_params = {
-            'boll_period': args.boll_period,
-            'boll_dev': args.boll_dev,
-            'position_size': args.position_size,
-            'stop_loss': args.stop_loss,
-            'take_profit': args.take_profit,
-            'max_holding_periods': args.max_holding_periods,
-        }
-        runner.run_backtest(strategy_params)
+    # 设置策略参数
+    strategy_params = {
+        'boll_period': args.boll_period,
+        'boll_dev': args.boll_dev,
+        'position_size': args.position_size,
+        'stop_loss': args.stop_loss,
+        'take_profit': args.take_profit,
+        'max_holding_periods': args.max_holding_periods,
+    }
+    
+    # 运行回测
+    runner.run_backtest(strategy_params)
 
 if __name__ == '__main__':
     main() 
