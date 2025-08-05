@@ -641,7 +641,7 @@ class SignalLevelICAnalyzer:
 
 def main():
     """主函数"""
-    analyzer = SignalLevelICAnalyzer('futures_emo_combined_data/sc2210_with_emotion_1h_lag180min.xlsx')
+    analyzer = SignalLevelICAnalyzer('futures_emo_combined_data/ag2212_with_emotion_30min_lag90min.xlsx')
     analyzer.load_data()
     
     # 1. 计算全局IC (包含Pearson和Spearman)

@@ -15,7 +15,7 @@ def process_selected_files(input_folder, selected_files=None, resample_rule='15m
     """
     # 配置输出路径
     output_folder = input_folder
-    output_file = output_folder / f'SC_combined_评论分析结果_{resample_rule}.xlsx'
+    output_file = output_folder / f'AG_combined_评论分析结果_{resample_rule}.xlsx'
 
     # 确保输出文件夹存在
     output_folder.mkdir(parents=True, exist_ok=True)
@@ -160,12 +160,12 @@ def process_selected_files(input_folder, selected_files=None, resample_rule='15m
 if __name__ == "__main__":
     input_folder = Path('./emo_data/emo_PAD')
     selected_files = [
-        "SC_评论分析结果.xlsx",
+        "AG_评论分析结果.xlsx",
         # 添加更多需要处理的文件名...
     ]
     
     # 可以根据需要修改时间粒度
     # 常用选项: '1min', '5min', '15min', '30min', '1H', '2H', '4H'
-    resample_rule = '15min'  # 默认15分钟，可以根据需要修改
-    
+    resample_rule = '1h'  # 默认1分钟，可以根据需要修改
+
     process_selected_files(input_folder, selected_files, resample_rule)
