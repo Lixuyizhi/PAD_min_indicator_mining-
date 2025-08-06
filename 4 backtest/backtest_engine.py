@@ -5,10 +5,11 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from datetime import datetime, timedelta
 import warnings
+import os
 warnings.filterwarnings('ignore')
 
 from data_loader import load_and_prepare_data, EmotionDataLoader
-from emotion_strategy import EmotionSignalStrategy, EmotionMomentumStrategy, SignalLevelStrategy
+from emotion_strategy import BollingerBandsStrategy, TurtleTradingStrategy, SignalLevelReverseStrategy
 
 class EmotionBacktestEngine:
     """情绪指标回测引擎"""
@@ -39,7 +40,7 @@ class EmotionBacktestEngine:
         self.cerebro.addanalyzer(bt.analyzers.TradeAnalyzer, _name='trades')
         
     def run_backtest(self, filename, strategy_class, strategy_params=None, 
-                    start_date=None, end_date=None, plot=True):
+                    start_date=None, end_date=None, plot=True, show_trades=True, max_trades_to_show=100):
         """运行回测"""
         print(f"开始回测: {filename}")
         print(f"策略: {strategy_class.__name__}")
@@ -79,7 +80,7 @@ class EmotionBacktestEngine:
             
             # 绘制图表
             if plot:
-                self._plot_results(strat, filename)
+                self._plot_results(strat, filename, show_trades=show_trades, max_trades_to_show=max_trades_to_show)
             
             return strat
             
@@ -145,55 +146,112 @@ class EmotionBacktestEngine:
         except:
             pass
         
-        # 如果是SignalLevelStrategy，显示额外的统计信息
+        # 显示策略胜率统计信息
         if hasattr(strat, 'trade_count') and strat.trade_count > 0:
             print(f"策略胜率: {strat.win_count}/{strat.trade_count} ({strat.win_count/strat.trade_count*100:.1f}%)")
         
         print("="*50)
     
-    def _plot_results(self, strat, filename):
-        """绘制回测结果"""
+    def _plot_results(self, strat, filename, show_trades=True, max_trades_to_show=100):
+        """绘制回测结果
+        参数:
+            strat: 策略实例
+            filename: 文件名
+            show_trades: 是否显示交易点
+            max_trades_to_show: 最大显示的交易点数
+        """
         try:
             # 设置中文字体
             plt.rcParams['font.sans-serif'] = ['SimHei', 'Arial Unicode MS']
             plt.rcParams['axes.unicode_minus'] = False
             
             # 创建图表
-            fig, axes = plt.subplots(2, 1, figsize=(15, 10))
+            fig, axes = plt.subplots(3, 1, figsize=(16, 15))
+            
+            # 绘制K线图和交易信号
+            plot_kwargs = {
+                'style': 'candlestick',
+                'volume': True,
+                'numfigs': 1,
+                'barup': 'red',
+                'bardown': 'green',
+                'ax': axes[0]
+            }
+            
+            # 如果交易次数太多，可以选择不显示所有交易点
+            if hasattr(strat.analyzers, 'trades'):
+                trades = strat.analyzers.trades.get_analysis()
+                if 'total' in trades and 'total' in trades['total']:
+                    total_trades = trades['total']['total']
+                    if total_trades > max_trades_to_show and show_trades:
+                        print(f"注意: 交易次数过多 ({total_trades}), 将只显示部分交易点")
+                        # 这里可以添加逻辑来只显示重要的交易点
+                        plot_kwargs['plotdist'] = max(1, int(total_trades / max_trades_to_show))
+            
+            self.cerebro.plot(**plot_kwargs)
             
             # 绘制资金曲线
-            self.cerebro.plot(style='candlestick', volume=False, 
-                            numfigs=1, barup='red', bardown='green',
-                            ax=axes[0])
+            if hasattr(strat, 'broker'):
+                value_history = [strat.broker.getvalue()]  # 初始值
+                for i in range(1, len(strat.data)):
+                    strat.broker.setcash(strat.broker.getvalue())
+                    value_history.append(strat.broker.getvalue())
+                axes[1].plot(value_history, label='资金曲线', color='blue')
+                axes[1].set_title('资金曲线')
+                axes[1].legend()
+                axes[1].grid(True)
             
-            # 绘制情绪指标
-            if hasattr(strat, 'signal_strength'):
-                axes[1].plot(strat.signal_strength.array, label='信号量', color='blue')
-            if hasattr(strat, 'polarity'):
-                axes[1].plot(strat.polarity.array, label='极性', color='red', alpha=0.7)
+            # 绘制策略指标
+            if hasattr(strat, 'bb'):
+                # 布林带策略
+                axes[2].plot(strat.bb.lines.mid.array, label='布林带中轨', color='blue', linewidth=2)
+                axes[2].plot(strat.bb.lines.top.array, label='布林带上轨', color='red', alpha=0.7)
+                axes[2].plot(strat.bb.lines.bot.array, label='布林带下轨', color='green', alpha=0.7)
+            elif hasattr(strat, 'highest'):
+                # 海龟交易策略
+                axes[2].plot(strat.highest.array, label='20日高点', color='red', alpha=0.7)
+                axes[2].plot(strat.lowest.array, label='20日低点', color='green', alpha=0.7)
+                if hasattr(strat, 'atr'):
+                    axes[2].plot(strat.atr.array, label='ATR', color='orange', alpha=0.7)
+            elif hasattr(strat, 'signal_level'):
+                # 信号量等级反向策略
+                axes[2].plot(strat.signal_level.array, label='信号量_等级', color='green', linewidth=2)
+                if hasattr(strat, 'returns_5'):
+                    axes[2].plot(strat.returns_5.array, label='5期收益率', color='blue', alpha=0.7)
+                # 添加阈值线
+                if hasattr(strat.p, 'signal_level_threshold'):
+                    axes[2].axhline(y=strat.p.signal_level_threshold, color='red', linestyle='--', alpha=0.7, label=f'信号量阈值({strat.p.signal_level_threshold})')
             
-            # 如果是SignalLevelStrategy，绘制信号量等级
-            if hasattr(strat, 'signal_level'):
-                axes[1].plot(strat.signal_level.array, label='信号量_等级', color='green', linewidth=2)
-                # 添加买入和卖出阈值线
-                if hasattr(strat.p, 'buy_level'):
-                    axes[1].axhline(y=strat.p.buy_level, color='red', linestyle='--', alpha=0.7, label=f'买入阈值({strat.p.buy_level})')
-                if hasattr(strat.p, 'sell_level'):
-                    axes[1].axhline(y=strat.p.sell_level, color='orange', linestyle='--', alpha=0.7, label=f'卖出阈值({strat.p.sell_level})')
-            
-            axes[1].set_title('情绪指标')
-            axes[1].legend()
-            axes[1].grid(True)
+            axes[2].set_title('策略指标')
+            axes[2].legend()
+            axes[2].grid(True)
             
             plt.tight_layout()
-            plt.savefig(f'backtest_results_{filename.replace(".xlsx", "")}.png', dpi=300, bbox_inches='tight')
-            # plt.show()
+            
+            # 确保结果目录存在
+            results_dir = 'backtest_results'
+            if not os.path.exists(results_dir):
+                os.makedirs(results_dir)
+            
+            # 保存图表
+            save_path = os.path.join(results_dir, f'backtest_results_{filename.replace(".xlsx", "")}.png')
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            print(f"图表已保存至: {save_path}")
+            
+            # 显示图表
+            try:
+                plt.show()
+            except Exception as e:
+                print(f"无法显示图表: {e}")
+                print("图表已保存，您可以在文件系统中查看")
             
         except Exception as e:
             print(f"绘图失败: {e}")
+            import traceback
+            traceback.print_exc()
 
-def run_signal_level_backtest():
-    """运行信号量等级策略回测"""
+def run_bollinger_bands_backtest():
+    """运行布林带策略回测"""
     engine = EmotionBacktestEngine(initial_cash=100000, commission=0.001)
     
     # 获取可用文件
@@ -208,20 +266,20 @@ def run_signal_level_backtest():
     test_file = files[0]
     print(f"使用文件: {test_file}")
     
-    # 信号量等级策略参数
+    # 布林带策略参数
     strategy_params = {
-        'buy_level': 6,      # 买入等级阈值
-        'sell_level': 3,     # 卖出等级阈值
-        'position_size': 0.1, # 仓位大小
-        'stop_loss': 0.02,   # 止损比例
-        'take_profit': 0.04  # 止盈比例
+        'bb_period': 20,        # 布林带周期
+        'bb_dev': 2.0,          # 布林带标准差倍数
+        'position_size': 0.1,   # 仓位大小
+        'stop_loss': 0.02,      # 止损比例
+        'take_profit': 0.04     # 止盈比例
     }
     
-    # 运行信号量等级策略
-    print("\n运行信号量等级策略...")
+    # 运行布林带策略
+    print("\n运行布林带策略...")
     result = engine.run_backtest(
         test_file, 
-        SignalLevelStrategy, 
+        BollingerBandsStrategy, 
         strategy_params,
         plot=True
     )
@@ -244,45 +302,62 @@ def run_comparison_backtest():
     test_file = files[0]
     print(f"使用文件: {test_file}")
     
-    # 信号量等级策略参数
-    signal_level_params = {
-        'buy_level': 6,
-        'sell_level': 3,
+    # 布林带策略参数
+    bollinger_params = {
+        'bb_period': 20,
+        'bb_dev': 2.0,
         'position_size': 0.1,
         'stop_loss': 0.02,
         'take_profit': 0.04
     }
     
-    # 情绪信号策略参数
-    emotion_params = {
-        'signal_threshold': 0.5,
+    # 海龟交易策略参数
+    turtle_params = {
+        'entry_period': 20,
+        'exit_period': 10,
+        'atr_period': 20,
+        'position_size': 0.1,
+        'risk_percent': 0.02
+    }
+    
+    # 信号量等级反向策略参数
+    signal_reverse_params = {
+        'signal_level_threshold': 6,
         'position_size': 0.1,
         'stop_loss': 0.02,
         'take_profit': 0.04,
-        'use_volume': True,
-        'use_emotion_level': True
+        'lookback_period': 5
     }
     
-    # 运行信号量等级策略
-    print("\n运行信号量等级策略...")
-    signal_level_results = engine.run_backtest(
+    # 运行布林带策略
+    print("\n运行布林带策略...")
+    bollinger_results = engine.run_backtest(
         test_file, 
-        SignalLevelStrategy, 
-        signal_level_params,
+        BollingerBandsStrategy, 
+        bollinger_params,
         plot=False
     )
     
-    # 运行情绪信号策略
-    print("\n运行情绪信号策略...")
-    emotion_results = engine.run_backtest(
+    # 运行海龟交易策略
+    print("\n运行海龟交易策略...")
+    turtle_results = engine.run_backtest(
         test_file, 
-        EmotionSignalStrategy, 
-        emotion_params,
+        TurtleTradingStrategy, 
+        turtle_params,
         plot=False
     )
     
-    return signal_level_results, emotion_results
+    # 运行信号量等级反向策略
+    print("\n运行信号量等级反向策略...")
+    signal_reverse_results = engine.run_backtest(
+        test_file, 
+        SignalLevelReverseStrategy, 
+        signal_reverse_params,
+        plot=False
+    )
+    
+    return bollinger_results, turtle_results, signal_reverse_results
 
 if __name__ == "__main__":
-    # 运行信号量等级策略回测
-    result = run_signal_level_backtest() 
+    # 运行布林带策略回测
+    result = run_bollinger_bands_backtest()

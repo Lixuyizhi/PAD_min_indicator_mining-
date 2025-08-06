@@ -15,15 +15,15 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from data_loader import EmotionDataLoader
 from backtest_engine import EmotionBacktestEngine
 from optimizer import ParameterOptimizer
-from emotion_strategy import EmotionSignalStrategy, EmotionMomentumStrategy, SignalLevelStrategy
+from emotion_strategy import BollingerBandsStrategy, TurtleTradingStrategy, SignalLevelReverseStrategy
 
-def run_backtest(data_file_path, strategy_type="signal_level", plot=True):
+def run_backtest(data_file_path, strategy_type="bollinger_bands", plot=True):
     """
     运行回测
     
     参数:
         data_file_path: 数据文件路径
-        strategy_type: 策略类型 ('signal_level', 'signal', 'momentum')
+        strategy_type: 策略类型 ('bollinger_bands', 'turtle_trading', 'signal_level_reverse')
         plot: 是否显示图表
     """
     print("=" * 60)
@@ -37,36 +37,36 @@ def run_backtest(data_file_path, strategy_type="signal_level", plot=True):
     engine = EmotionBacktestEngine(initial_cash=100000, commission=0.001)
     
     # 根据策略类型设置参数
-    if strategy_type == "signal_level":
-        strategy_class = SignalLevelStrategy
+    if strategy_type == "bollinger_bands":
+        strategy_class = BollingerBandsStrategy
         strategy_params = {
-            'buy_level': 6,      # 买入等级阈值
-            'sell_level': 3,     # 卖出等级阈值
-            'position_size': 0.1, # 仓位大小
-            'stop_loss': 0.02,   # 止损比例
-            'take_profit': 0.04  # 止盈比例
+            'bb_period': 20,        # 布林带周期
+            'bb_dev': 2.0,          # 布林带标准差倍数
+            'position_size': 0.1,   # 仓位大小
+            'stop_loss': 0.02,      # 止损比例
+            'take_profit': 0.04     # 止盈比例
         }
-    elif strategy_type == "signal":
-        strategy_class = EmotionSignalStrategy
+    elif strategy_type == "turtle_trading":
+        strategy_class = TurtleTradingStrategy
         strategy_params = {
-            'signal_threshold': 0.5,
-            'position_size': 0.1,
-            'stop_loss': 0.02,
-            'take_profit': 0.04,
-            'use_volume': True,
-            'use_emotion_level': True
+            'entry_period': 20,     # 入场突破周期
+            'exit_period': 10,      # 出场突破周期
+            'atr_period': 20,       # ATR周期
+            'position_size': 0.1,   # 仓位大小
+            'risk_percent': 0.02    # 风险百分比
         }
-    elif strategy_type == "momentum":
-        strategy_class = EmotionMomentumStrategy
+    elif strategy_type == "signal_level_reverse":
+        strategy_class = SignalLevelReverseStrategy
         strategy_params = {
-            'momentum_period': 20,
-            'signal_period': 5,
-            'position_size': 0.1,
-            'stop_loss': 0.03
+            'signal_level_threshold': 6,  # 信号量等级阈值
+            'position_size': 0.1,         # 仓位大小
+            'stop_loss': 0.02,            # 止损比例
+            'take_profit': 0.04,          # 止盈比例
+            'lookback_period': 5          # 回看期数
         }
     else:
         print(f"未知的策略类型: {strategy_type}")
-        print("支持的策略类型: signal_level, signal, momentum")
+        print("支持的策略类型: bollinger_bands, turtle_trading, signal_level_reverse")
         return None
     
     # 运行回测
@@ -74,13 +74,13 @@ def run_backtest(data_file_path, strategy_type="signal_level", plot=True):
     
     return result
 
-def run_optimization(data_file_path, strategy_type="signal_level"):
+def run_optimization(data_file_path, strategy_type="bollinger_bands"):
     """
     运行参数优化
     
     参数:
         data_file_path: 数据文件路径
-        strategy_type: 策略类型 ('signal_level', 'signal', 'momentum')
+        strategy_type: 策略类型 ('bollinger_bands', 'turtle_trading', 'signal_level_reverse')
     """
     print("=" * 60)
     print("参数优化")
@@ -91,12 +91,12 @@ def run_optimization(data_file_path, strategy_type="signal_level"):
     
     optimizer = ParameterOptimizer(initial_cash=100000, commission=0.001)
     
-    if strategy_type == "signal_level":
-        results = optimizer.optimize_signal_level_strategy(data_file_path)
-    elif strategy_type == "signal":
-        results = optimizer.optimize_emotion_signal_strategy(data_file_path)
-    elif strategy_type == "momentum":
-        results = optimizer.optimize_emotion_momentum_strategy(data_file_path)
+    if strategy_type == "bollinger_bands":
+        results = optimizer.optimize_bollinger_bands_strategy(data_file_path)
+    elif strategy_type == "turtle_trading":
+        results = optimizer.optimize_turtle_trading_strategy(data_file_path)
+    elif strategy_type == "signal_level_reverse":
+        results = optimizer.optimize_signal_level_reverse_strategy(data_file_path)
     else:
         print(f"未知的策略类型: {strategy_type}")
         return None
@@ -118,42 +118,53 @@ def run_strategy_comparison(data_file_path):
     
     engine = EmotionBacktestEngine(initial_cash=100000, commission=0.001)
     
-    # 信号量等级策略参数
-    signal_level_params = {
-        'buy_level': 6,
-        'sell_level': 3,
+    # 布林带策略参数
+    bollinger_params = {
+        'bb_period': 20,
+        'bb_dev': 2.0,
         'position_size': 0.1,
         'stop_loss': 0.02,
         'take_profit': 0.04
     }
     
-    # 情绪信号策略参数
-    emotion_params = {
-        'signal_threshold': 0.5,
+    # 海龟交易策略参数
+    turtle_params = {
+        'entry_period': 20,
+        'exit_period': 10,
+        'atr_period': 20,
+        'position_size': 0.1,
+        'risk_percent': 0.02
+    }
+    
+    # 信号量等级反向策略参数
+    signal_reverse_params = {
+        'signal_level_threshold': 6,
         'position_size': 0.1,
         'stop_loss': 0.02,
         'take_profit': 0.04,
-        'use_volume': True,
-        'use_emotion_level': True
+        'lookback_period': 5
     }
     
-    print("运行信号量等级策略...")
-    signal_level_result = engine.run_backtest(data_file_path, SignalLevelStrategy, signal_level_params, plot=False)
+    print("运行布林带策略...")
+    bollinger_result = engine.run_backtest(data_file_path, BollingerBandsStrategy, bollinger_params, plot=False)
     
-    print("\n运行情绪信号策略...")
-    emotion_result = engine.run_backtest(data_file_path, EmotionSignalStrategy, emotion_params, plot=False)
+    print("\n运行海龟交易策略...")
+    turtle_result = engine.run_backtest(data_file_path, TurtleTradingStrategy, turtle_params, plot=False)
+    
+    print("\n运行信号量等级反向策略...")
+    signal_reverse_result = engine.run_backtest(data_file_path, SignalLevelReverseStrategy, signal_reverse_params, plot=False)
     
     # 对比结果
     print("\n" + "="*60)
     print("策略对比结果")
     print("="*60)
     
-    if signal_level_result and emotion_result:
-        print(f"{'指标':<15} {'信号量等级策略':<15} {'情绪信号策略':<15}")
+    if bollinger_result and turtle_result and signal_reverse_result:
+        print(f"{'指标':<15} {'布林带策略':<15} {'海龟交易策略':<15} {'信号量反向策略':<15}")
         print("-" * 60)
         print("回测完成，详细结果请查看上方输出")
     
-    return signal_level_result, emotion_result
+    return bollinger_result, turtle_result, signal_reverse_result
 
 def list_available_files():
     """列出可用的数据文件"""
@@ -186,7 +197,7 @@ def main():
     DATA_FILE_PATH = "sc2210_with_emotion_1h_lag120min.xlsx"  # 修改为您的数据文件路径
     
     # 在这里直接指定策略类型
-    STRATEGY_TYPE = "signal_level"  # 可选: "signal_level", "signal", "momentum"
+    STRATEGY_TYPE = "bollinger_bands"  # 可选: "bollinger_bands", "turtle_trading", "signal_level_reverse"
     
     # 在这里指定运行模式
     RUN_MODE = "backtest"  # 可选: "backtest", "optimize", "compare"

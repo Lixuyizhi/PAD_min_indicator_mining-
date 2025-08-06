@@ -6,7 +6,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 from data_loader import load_and_prepare_data
-from emotion_strategy import EmotionSignalStrategy, EmotionMomentumStrategy, SignalLevelStrategy
+from emotion_strategy import BollingerBandsStrategy, TurtleTradingStrategy, SignalLevelReverseStrategy
 
 class ParameterOptimizer:
     """参数优化器"""
@@ -166,43 +166,43 @@ class ParameterOptimizer:
         print(f"最高收益率: {max(returns):.2f}%")
         print(f"最低收益率: {min(returns):.2f}%")
     
-    def optimize_signal_level_strategy(self, filename, start_date=None, end_date=None):
-        """优化信号量等级策略"""
+    def optimize_bollinger_bands_strategy(self, filename, start_date=None, end_date=None):
+        """优化布林带策略"""
         param_ranges = {
-            'buy_level': [5, 6, 7, 8],           # 买入等级阈值
-            'sell_level': [2, 3, 4, 5],           # 卖出等级阈值
+            'bb_period': [15, 20, 25, 30],       # 布林带周期
+            'bb_dev': [1.5, 2.0, 2.5, 3.0],      # 布林带标准差倍数
             'position_size': [0.05, 0.1, 0.15, 0.2], # 仓位大小
             'stop_loss': [0.015, 0.02, 0.025, 0.03], # 止损比例
             'take_profit': [0.03, 0.04, 0.05, 0.06]  # 止盈比例
         }
         
-        return self.optimize_strategy(filename, SignalLevelStrategy, param_ranges, 
+        return self.optimize_strategy(filename, BollingerBandsStrategy, param_ranges, 
                                    start_date, end_date)
     
-    def optimize_emotion_signal_strategy(self, filename, start_date=None, end_date=None):
-        """优化情绪信号策略"""
+    def optimize_turtle_trading_strategy(self, filename, start_date=None, end_date=None):
+        """优化海龟交易策略"""
         param_ranges = {
-            'signal_threshold': [0.3, 0.5, 0.7, 1.0],
-            'position_size': [0.05, 0.1, 0.15, 0.2],
-            'stop_loss': [0.015, 0.02, 0.025, 0.03],
-            'take_profit': [0.03, 0.04, 0.05, 0.06],
-            'use_volume': [True, False],
-            'use_emotion_level': [True, False]
+            'entry_period': [15, 20, 25, 30],     # 入场突破周期
+            'exit_period': [8, 10, 12, 15],       # 出场突破周期
+            'atr_period': [15, 20, 25, 30],       # ATR周期
+            'position_size': [0.05, 0.1, 0.15, 0.2], # 仓位大小
+            'risk_percent': [0.015, 0.02, 0.025, 0.03] # 风险百分比
         }
         
-        return self.optimize_strategy(filename, EmotionSignalStrategy, param_ranges, 
+        return self.optimize_strategy(filename, TurtleTradingStrategy, param_ranges, 
                                    start_date, end_date)
     
-    def optimize_emotion_momentum_strategy(self, filename, start_date=None, end_date=None):
-        """优化情绪动量策略"""
+    def optimize_signal_level_reverse_strategy(self, filename, start_date=None, end_date=None):
+        """优化信号量等级反向策略"""
         param_ranges = {
-            'momentum_period': [10, 15, 20, 25, 30],
-            'signal_period': [3, 5, 7, 10],
-            'position_size': [0.05, 0.1, 0.15, 0.2],
-            'stop_loss': [0.02, 0.025, 0.03, 0.035]
+            'signal_level_threshold': [5, 6, 7, 8],  # 信号量等级阈值
+            'position_size': [0.05, 0.1, 0.15, 0.2], # 仓位大小
+            'stop_loss': [0.015, 0.02, 0.025, 0.03], # 止损比例
+            'take_profit': [0.03, 0.04, 0.05, 0.06], # 止盈比例
+            'lookback_period': [3, 5, 7, 10]         # 回看期数
         }
         
-        return self.optimize_strategy(filename, EmotionMomentumStrategy, param_ranges, 
+        return self.optimize_strategy(filename, SignalLevelReverseStrategy, param_ranges, 
                                    start_date, end_date)
 
 def run_optimization_example():
@@ -222,20 +222,20 @@ def run_optimization_example():
     test_file = files[0]
     print(f"使用文件: {test_file}")
     
-    # 优化信号量等级策略
-    print("\n优化信号量等级策略...")
-    signal_level_results = optimizer.optimize_signal_level_strategy(test_file)
+    # 优化布林带策略
+    print("\n优化布林带策略...")
+    bollinger_results = optimizer.optimize_bollinger_bands_strategy(test_file)
     
-    # 优化情绪信号策略
-    print("\n优化情绪信号策略...")
-    emotion_results = optimizer.optimize_emotion_signal_strategy(test_file)
+    # 优化海龟交易策略
+    print("\n优化海龟交易策略...")
+    turtle_results = optimizer.optimize_turtle_trading_strategy(test_file)
     
-    # 优化情绪动量策略
-    print("\n优化情绪动量策略...")
-    momentum_results = optimizer.optimize_emotion_momentum_strategy(test_file)
+    # 优化信号量等级反向策略
+    print("\n优化信号量等级反向策略...")
+    signal_reverse_results = optimizer.optimize_signal_level_reverse_strategy(test_file)
     
-    return signal_level_results, emotion_results, momentum_results
+    return bollinger_results, turtle_results, signal_reverse_results
 
 if __name__ == "__main__":
     # 运行参数优化
-    signal_level_results, emotion_results, momentum_results = run_optimization_example() 
+    bollinger_results, turtle_results, signal_reverse_results = run_optimization_example() 
