@@ -16,6 +16,7 @@ from data_loader import EmotionDataLoader
 from backtest_engine import EmotionBacktestEngine
 from optimizer import ParameterOptimizer
 from emotion_strategy import BollingerBandsStrategy, TurtleTradingStrategy, SignalLevelReverseStrategy
+from analyst_visualize import BacktestAnalyzer, create_comparison_chart
 
 def run_backtest(data_file_path, strategy_type="bollinger_bands", plot=True):
     """
@@ -117,6 +118,7 @@ def run_strategy_comparison(data_file_path):
     print("-" * 60)
     
     engine = EmotionBacktestEngine(initial_cash=100000, commission=0.001)
+    analyzer = BacktestAnalyzer()
     
     # 布林带策略参数
     bollinger_params = {
@@ -154,15 +156,34 @@ def run_strategy_comparison(data_file_path):
     print("\n运行信号量等级反向策略...")
     signal_reverse_result = engine.run_backtest(data_file_path, SignalLevelReverseStrategy, signal_reverse_params, plot=False)
     
-    # 对比结果
-    print("\n" + "="*60)
-    print("策略对比结果")
-    print("="*60)
+    # 分析结果
+    results = []
+    strategy_names = []
     
-    if bollinger_result and turtle_result and signal_reverse_result:
-        print(f"{'指标':<15} {'布林带策略':<15} {'海龟交易策略':<15} {'信号量反向策略':<15}")
-        print("-" * 60)
-        print("回测完成，详细结果请查看上方输出")
+    if bollinger_result:
+        bollinger_analysis = analyzer.analyze_strategy_performance(bollinger_result)
+        analyzer.print_analysis_report(bollinger_analysis, "布林带策略")
+        results.append(bollinger_analysis)
+        strategy_names.append("布林带策略")
+    
+    if turtle_result:
+        turtle_analysis = analyzer.analyze_strategy_performance(turtle_result)
+        analyzer.print_analysis_report(turtle_analysis, "海龟交易策略")
+        results.append(turtle_analysis)
+        strategy_names.append("海龟交易策略")
+    
+    if signal_reverse_result:
+        signal_analysis = analyzer.analyze_strategy_performance(signal_reverse_result)
+        analyzer.print_analysis_report(signal_analysis, "信号量反向策略")
+        results.append(signal_analysis)
+        strategy_names.append("信号量反向策略")
+    
+    # 创建对比图表
+    if len(results) > 1:
+        print("\n" + "="*60)
+        print("创建策略对比图表...")
+        print("="*60)
+        create_comparison_chart(results, strategy_names)
     
     return bollinger_result, turtle_result, signal_reverse_result
 

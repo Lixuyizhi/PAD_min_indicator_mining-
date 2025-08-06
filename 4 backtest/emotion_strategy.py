@@ -31,6 +31,10 @@ class BollingerBandsStrategy(bt.Strategy):
         self.win_count = 0
         self.loss_count = 0
         
+        # 资金跟踪
+        self.portfolio_values = []
+        self.trade_dates = []
+        
     def log(self, txt, dt=None):
         """记录日志"""
         dt = dt or self.datas[0].datetime.date(0)
@@ -71,6 +75,11 @@ class BollingerBandsStrategy(bt.Strategy):
     
     def next(self):
         """主要策略逻辑 - 布林带策略"""
+        # 记录资金变化
+        current_value = self.broker.getvalue()
+        self.portfolio_values.append(current_value)
+        self.trade_dates.append(len(self.data))
+        
         # 如果有未完成的订单，等待
         if self.order:
             return
@@ -129,7 +138,6 @@ class TurtleTradingStrategy(bt.Strategy):
     )
     
     def __init__(self):
-        # 初始化订单变量
         self.order = None
         self.buyprice = None
         self.buycomm = None
@@ -148,31 +156,28 @@ class TurtleTradingStrategy(bt.Strategy):
         self.win_count = 0
         self.loss_count = 0
         
+        # 资金跟踪
+        self.portfolio_values = []
+        self.trade_dates = []
+    
     def log(self, txt, dt=None):
-        """记录日志"""
         dt = dt or self.datas[0].datetime.date(0)
         print(f'{dt.isoformat()}, {txt}')
     
     def notify_order(self, order):
-        """订单状态通知"""
         if order.status in [order.Submitted, order.Accepted]:
             return
         
         if order.status in [order.Completed]:
             if order.isbuy():
-                self.log(f'买入执行, 价格: {order.executed.price:.2f}, 成本: {order.executed.value:.2f}, 手续费: {order.executed.comm:.2f}')
+                self.log(f'买入执行, 价格: {order.executed.price:.2f}')
                 self.buyprice = order.executed.price
-                self.buycomm = order.executed.comm
             else:
-                self.log(f'卖出执行, 价格: {order.executed.price:.2f}, 成本: {order.executed.value:.2f}, 手续费: {order.executed.comm:.2f}')
-            
-        elif order.status in [order.Canceled, order.Margin, order.Rejected]:
-            self.log('订单取消/保证金不足/拒绝')
+                self.log(f'卖出执行, 价格: {order.executed.price:.2f}')
         
         self.order = None
     
     def notify_trade(self, trade):
-        """交易完成通知"""
         if not trade.isclosed:
             return
         
@@ -188,7 +193,11 @@ class TurtleTradingStrategy(bt.Strategy):
     
     def next(self):
         """主要策略逻辑 - 海龟交易策略"""
-        # 如果有未完成的订单，等待
+        # 记录资金变化
+        current_value = self.broker.getvalue()
+        self.portfolio_values.append(current_value)
+        self.trade_dates.append(len(self.data))
+        
         if self.order:
             return
         
@@ -261,6 +270,10 @@ class SignalLevelReverseStrategy(bt.Strategy):
         self.win_count = 0
         self.loss_count = 0
         
+        # 资金跟踪
+        self.portfolio_values = []
+        self.trade_dates = []
+        
     def log(self, txt, dt=None):
         """记录日志"""
         dt = dt or self.datas[0].datetime.date(0)
@@ -301,6 +314,11 @@ class SignalLevelReverseStrategy(bt.Strategy):
     
     def next(self):
         """主要策略逻辑 - 基于信号量等级的反向策略"""
+        # 记录资金变化
+        current_value = self.broker.getvalue()
+        self.portfolio_values.append(current_value)
+        self.trade_dates.append(len(self.data))
+        
         # 如果有未完成的订单，等待
         if self.order:
             return
