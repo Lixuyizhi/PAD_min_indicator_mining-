@@ -9,7 +9,13 @@ warnings.filterwarnings('ignore')
 class EmotionDataLoader:
     """情绪数据加载器"""
     
-    def __init__(self, data_dir="./futures_emo_combined_data"):
+    def __init__(self, data_dir=None):
+        if data_dir is None:
+            # 自动检测数据目录路径
+            script_dir = Path(__file__).parent  # 当前脚本所在目录
+            project_root = script_dir.parent     # 项目根目录
+            data_dir = project_root / "futures_emo_combined_data"
+        
         self.data_dir = Path(data_dir)
         
     def load_data(self, filename):
@@ -94,7 +100,7 @@ class BacktraderDataAdapter:
         
         return df
 
-def load_and_prepare_data(filename, data_dir="./futures_emo_combined_data"):
+def load_and_prepare_data(filename, data_dir=None):
     """加载并准备数据用于回测"""
     loader = EmotionDataLoader(data_dir)
     df = loader.load_data(filename)

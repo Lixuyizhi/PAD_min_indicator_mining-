@@ -41,20 +41,26 @@ def run_backtest(data_file_path, strategy_type="bollinger_bands", plot=True):
     if strategy_type == "bollinger_bands":
         strategy_class = BollingerBandsStrategy
         strategy_params = {
-            'bb_period': 20,        # 布林带周期
-            'bb_dev': 2.0,          # 布林带标准差倍数
-            'position_size': 0.1,   # 仓位大小
-            'stop_loss': 0.02,      # 止损比例
-            'take_profit': 0.04     # 止盈比例
+            'bb_period': 15,            # 布林带周期 (优化后)
+            'bb_dev': 1.8,              # 布林带标准差倍数 (优化后)
+            'position_size': 0.3,       # 仓位大小 (优化后)
+            'stop_loss': 0.03,          # 止损比例 (优化后)
+            'take_profit': 0.06,        # 止盈比例 (优化后)
+            'min_volume_ratio': 1.2,    # 最小成交量比率
+            'trend_filter': True        # 是否启用趋势过滤
         }
     elif strategy_type == "turtle_trading":
         strategy_class = TurtleTradingStrategy
         strategy_params = {
-            'entry_period': 20,     # 入场突破周期
-            'exit_period': 10,      # 出场突破周期
-            'atr_period': 20,       # ATR周期
-            'position_size': 0.1,   # 仓位大小
-            'risk_percent': 0.02    # 风险百分比
+            'entry_period': 15,         # 入场突破周期 (优化后)
+            'exit_period': 8,           # 出场突破周期 (优化后)
+            'atr_period': 14,           # ATR周期 (优化后)
+            'position_size': 0.25,      # 仓位大小 (优化后)
+            'risk_percent': 0.015,      # 风险百分比 (优化后)
+            'min_volume_ratio': 1.1,    # 最小成交量比率
+            'trend_strength': 0.02,     # 趋势强度阈值
+            'pyramid_enable': True,     # 是否启用金字塔加仓
+            'max_pyramids': 2           # 最大加仓次数
         }
     elif strategy_type == "signal_level_reverse":
         strategy_class = SignalLevelReverseStrategy
@@ -120,22 +126,28 @@ def run_strategy_comparison(data_file_path):
     engine = EmotionBacktestEngine(initial_cash=100000, commission=0.001)
     analyzer = BacktestAnalyzer()
     
-    # 布林带策略参数
+    # 布林带策略参数 (优化后)
     bollinger_params = {
-        'bb_period': 20,
-        'bb_dev': 2.0,
-        'position_size': 0.1,
-        'stop_loss': 0.02,
-        'take_profit': 0.04
+        'bb_period': 15,
+        'bb_dev': 1.8,
+        'position_size': 0.3,
+        'stop_loss': 0.03,
+        'take_profit': 0.06,
+        'min_volume_ratio': 1.2,
+        'trend_filter': True
     }
     
-    # 海龟交易策略参数
+    # 海龟交易策略参数 (优化后)
     turtle_params = {
-        'entry_period': 20,
-        'exit_period': 10,
-        'atr_period': 20,
-        'position_size': 0.1,
-        'risk_percent': 0.02
+        'entry_period': 15,
+        'exit_period': 8,
+        'atr_period': 14,
+        'position_size': 0.25,
+        'risk_percent': 0.015,
+        'min_volume_ratio': 1.1,
+        'trend_strength': 0.02,
+        'pyramid_enable': True,
+        'max_pyramids': 2
     }
     
     # 信号量等级反向策略参数
@@ -160,30 +172,39 @@ def run_strategy_comparison(data_file_path):
     results = []
     strategy_names = []
     
-    if bollinger_result:
-        bollinger_analysis = analyzer.analyze_strategy_performance(bollinger_result)
-        analyzer.print_analysis_report(bollinger_analysis, "布林带策略")
-        results.append(bollinger_analysis)
-        strategy_names.append("布林带策略")
+    if bollinger_result is not None:
+        try:
+            bollinger_analysis = analyzer.analyze_strategy_performance(bollinger_result)
+            analyzer.print_analysis_report(bollinger_analysis, "布林带策略")
+            results.append(bollinger_analysis)
+            strategy_names.append("布林带策略")
+        except Exception as e:
+            print(f"布林带策略分析失败: {e}")
     
-    if turtle_result:
-        turtle_analysis = analyzer.analyze_strategy_performance(turtle_result)
-        analyzer.print_analysis_report(turtle_analysis, "海龟交易策略")
-        results.append(turtle_analysis)
-        strategy_names.append("海龟交易策略")
+    if turtle_result is not None:
+        try:
+            turtle_analysis = analyzer.analyze_strategy_performance(turtle_result)
+            analyzer.print_analysis_report(turtle_analysis, "海龟交易策略")
+            results.append(turtle_analysis)
+            strategy_names.append("海龟交易策略")
+        except Exception as e:
+            print(f"海龟交易策略分析失败: {e}")
     
-    if signal_reverse_result:
-        signal_analysis = analyzer.analyze_strategy_performance(signal_reverse_result)
-        analyzer.print_analysis_report(signal_analysis, "信号量反向策略")
-        results.append(signal_analysis)
-        strategy_names.append("信号量反向策略")
+    if signal_reverse_result is not None:
+        try:
+            signal_analysis = analyzer.analyze_strategy_performance(signal_reverse_result)
+            analyzer.print_analysis_report(signal_analysis, "信号量反向策略")
+            results.append(signal_analysis)
+            strategy_names.append("信号量反向策略")
+        except Exception as e:
+            print(f"信号量反向策略分析失败: {e}")
     
-    # 创建对比图表
-    if len(results) > 1:
-        print("\n" + "="*60)
-        print("创建策略对比图表...")
-        print("="*60)
-        create_comparison_chart(results, strategy_names)
+    # # 创建对比图表
+    # if len(results) > 1:
+    #     print("\n" + "="*60)
+    #     print("创建策略对比图表...")
+    #     print("="*60)
+    #     create_comparison_chart(results, strategy_names)
     
     return bollinger_result, turtle_result, signal_reverse_result
 
@@ -218,13 +239,14 @@ def main():
     DATA_FILE_PATH = "sc2210_with_emotion_1h_lag120min.xlsx"  # 修改为您的数据文件路径
     
     # 在这里直接指定策略类型
-    STRATEGY_TYPE = "bollinger_bands"  # 可选: "bollinger_bands", "turtle_trading", "signal_level_reverse"
+    STRATEGY_TYPE = "signal_level_reverse"  # 可选: "bollinger_bands", "turtle_trading", "signal_level_reverse"
     
     # 在这里指定运行模式
     RUN_MODE = "backtest"  # 可选: "backtest", "optimize", "compare"
     
     # 是否显示图表
-    SHOW_PLOT = True
+    SHOW_PLOT = False
+
     # ================================================
     
     # 检查数据文件是否存在
@@ -249,7 +271,7 @@ def main():
         
     elif RUN_MODE == "compare":
         print("运行策略对比模式")
-        signal_level_result, emotion_result = run_strategy_comparison(DATA_FILE_PATH)
+        results = run_strategy_comparison(DATA_FILE_PATH)
         
     else:
         print(f"未知的运行模式: {RUN_MODE}")

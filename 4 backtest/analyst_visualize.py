@@ -79,12 +79,44 @@ class BacktestVisualizer:
     
     def _plot_candlestick_with_trades(self, strat, ax, show_trades=True, max_trades_to_show=100):
         """绘制K线图和交易点"""
-        # 获取价格数据
-        dates = list(range(len(strat.data)))
-        opens = [strat.data.open[i] for i in range(len(strat.data))]
-        highs = [strat.data.high[i] for i in range(len(strat.data))]
-        lows = [strat.data.low[i] for i in range(len(strat.data))]
-        closes = [strat.data.close[i] for i in range(len(strat.data))]
+        # 获取价格数据 - 使用更安全的backtrader数据访问方式
+        try:
+            # 尝试从数组中获取数据
+            opens = strat.data.open.array
+            highs = strat.data.high.array
+            lows = strat.data.low.array
+            closes = strat.data.close.array
+            
+            # 过滤掉无效数据 (NaN值)
+            valid_mask = ~np.isnan(opens) & ~np.isnan(highs) & ~np.isnan(lows) & ~np.isnan(closes)
+            
+            opens = opens[valid_mask]
+            highs = highs[valid_mask]
+            lows = lows[valid_mask]
+            closes = closes[valid_mask]
+            
+            dates = list(range(len(opens)))
+            
+        except Exception as e:
+            print(f"无法获取价格数据: {e}")
+            # 创建简单的收盘价线图作为备选
+            try:
+                closes = []
+                for i in range(min(len(strat.data), 100)):  # 限制最多100个数据点
+                    try:
+                        closes.append(strat.data.close[0-i])
+                    except:
+                        break
+                if closes:
+                    closes.reverse()  # 恢复时间顺序
+                    dates = list(range(len(closes)))
+                    ax.plot(dates, closes, label='收盘价', color='blue')
+                    ax.set_title('价格走势')
+                    ax.legend()
+                return
+            except:
+                print("无法绘制价格数据")
+                return
         
         # 绘制K线图（简化版本，避免过于密集）
         # 如果数据点太多，进行采样
