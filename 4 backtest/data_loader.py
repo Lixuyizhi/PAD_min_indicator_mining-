@@ -9,7 +9,7 @@ warnings.filterwarnings('ignore')
 class EmotionDataLoader:
     """情绪数据加载器"""
     
-    def __init__(self, data_dir="../futures_emo_combined_data"):
+    def __init__(self, data_dir="./futures_emo_combined_data"):
         self.data_dir = Path(data_dir)
         
     def load_data(self, filename):
@@ -94,7 +94,7 @@ class BacktraderDataAdapter:
         
         return df
 
-def load_and_prepare_data(filename, data_dir="../futures_emo_combined_data"):
+def load_and_prepare_data(filename, data_dir="./futures_emo_combined_data"):
     """加载并准备数据用于回测"""
     loader = EmotionDataLoader(data_dir)
     df = loader.load_data(filename)
@@ -103,7 +103,7 @@ def load_and_prepare_data(filename, data_dir="../futures_emo_combined_data"):
     df = BacktraderDataAdapter.add_emotion_indicators(df)
     
     # 创建backtrader数据源
-    data_feed = BacktraderDataAdapter.create_data_feed(df, name=filename)
+    data_feed = BacktraderDataAdapter.create_data_feed(df)
     
     return df, data_feed
 

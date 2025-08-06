@@ -8,7 +8,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 from data_loader import load_and_prepare_data, EmotionDataLoader
-from emotion_strategy import EmotionSignalStrategy, EmotionMomentumStrategy
+from emotion_strategy import EmotionSignalStrategy, EmotionMomentumStrategy, SignalLevelStrategy
 
 class EmotionBacktestEngine:
     """情绪指标回测引擎"""
@@ -145,6 +145,10 @@ class EmotionBacktestEngine:
         except:
             pass
         
+        # 如果是SignalLevelStrategy，显示额外的统计信息
+        if hasattr(strat, 'trade_count') and strat.trade_count > 0:
+            print(f"策略胜率: {strat.win_count}/{strat.trade_count} ({strat.win_count/strat.trade_count*100:.1f}%)")
+        
         print("="*50)
     
     def _plot_results(self, strat, filename):
@@ -168,16 +172,61 @@ class EmotionBacktestEngine:
             if hasattr(strat, 'polarity'):
                 axes[1].plot(strat.polarity.array, label='极性', color='red', alpha=0.7)
             
+            # 如果是SignalLevelStrategy，绘制信号量等级
+            if hasattr(strat, 'signal_level'):
+                axes[1].plot(strat.signal_level.array, label='信号量_等级', color='green', linewidth=2)
+                # 添加买入和卖出阈值线
+                if hasattr(strat.p, 'buy_level'):
+                    axes[1].axhline(y=strat.p.buy_level, color='red', linestyle='--', alpha=0.7, label=f'买入阈值({strat.p.buy_level})')
+                if hasattr(strat.p, 'sell_level'):
+                    axes[1].axhline(y=strat.p.sell_level, color='orange', linestyle='--', alpha=0.7, label=f'卖出阈值({strat.p.sell_level})')
+            
             axes[1].set_title('情绪指标')
             axes[1].legend()
             axes[1].grid(True)
             
             plt.tight_layout()
             plt.savefig(f'backtest_results_{filename.replace(".xlsx", "")}.png', dpi=300, bbox_inches='tight')
-            plt.show()
+            # plt.show()
             
         except Exception as e:
             print(f"绘图失败: {e}")
+
+def run_signal_level_backtest():
+    """运行信号量等级策略回测"""
+    engine = EmotionBacktestEngine(initial_cash=100000, commission=0.001)
+    
+    # 获取可用文件
+    loader = EmotionDataLoader()
+    files = loader.get_available_files()
+    
+    if not files:
+        print("没有找到数据文件")
+        return None
+    
+    # 选择第一个文件进行测试
+    test_file = files[0]
+    print(f"使用文件: {test_file}")
+    
+    # 信号量等级策略参数
+    strategy_params = {
+        'buy_level': 6,      # 买入等级阈值
+        'sell_level': 3,     # 卖出等级阈值
+        'position_size': 0.1, # 仓位大小
+        'stop_loss': 0.02,   # 止损比例
+        'take_profit': 0.04  # 止盈比例
+    }
+    
+    # 运行信号量等级策略
+    print("\n运行信号量等级策略...")
+    result = engine.run_backtest(
+        test_file, 
+        SignalLevelStrategy, 
+        strategy_params,
+        plot=True
+    )
+    
+    return result
 
 def run_comparison_backtest():
     """运行对比回测"""
@@ -195,8 +244,17 @@ def run_comparison_backtest():
     test_file = files[0]
     print(f"使用文件: {test_file}")
     
-    # 策略参数
-    strategy_params = {
+    # 信号量等级策略参数
+    signal_level_params = {
+        'buy_level': 6,
+        'sell_level': 3,
+        'position_size': 0.1,
+        'stop_loss': 0.02,
+        'take_profit': 0.04
+    }
+    
+    # 情绪信号策略参数
+    emotion_params = {
         'signal_threshold': 0.5,
         'position_size': 0.1,
         'stop_loss': 0.02,
@@ -205,33 +263,26 @@ def run_comparison_backtest():
         'use_emotion_level': True
     }
     
+    # 运行信号量等级策略
+    print("\n运行信号量等级策略...")
+    signal_level_results = engine.run_backtest(
+        test_file, 
+        SignalLevelStrategy, 
+        signal_level_params,
+        plot=False
+    )
+    
     # 运行情绪信号策略
     print("\n运行情绪信号策略...")
     emotion_results = engine.run_backtest(
         test_file, 
         EmotionSignalStrategy, 
-        strategy_params,
-        plot=True
+        emotion_params,
+        plot=False
     )
     
-    # 运行情绪动量策略
-    print("\n运行情绪动量策略...")
-    momentum_params = {
-        'momentum_period': 20,
-        'signal_period': 5,
-        'position_size': 0.1,
-        'stop_loss': 0.03
-    }
-    
-    momentum_results = engine.run_backtest(
-        test_file,
-        EmotionMomentumStrategy,
-        momentum_params,
-        plot=True
-    )
-    
-    return emotion_results, momentum_results
+    return signal_level_results, emotion_results
 
 if __name__ == "__main__":
-    # 运行对比回测
-    emotion_results, momentum_results = run_comparison_backtest() 
+    # 运行信号量等级策略回测
+    result = run_signal_level_backtest() 

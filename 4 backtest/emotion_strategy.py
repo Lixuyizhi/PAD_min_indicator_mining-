@@ -2,8 +2,110 @@ import backtrader as bt
 import numpy as np
 import pandas as pd
 
+class SignalLevelStrategy(bt.Strategy):
+    """基于信号量_等级的单因子策略"""
+    
+    params = (
+        ('buy_level', 4),           # 买入等级阈值
+        ('sell_level', 5),          # 卖出等级阈值
+        ('position_size', 0.1),     # 仓位大小
+        ('stop_loss', 0.02),        # 止损比例
+        ('take_profit', 0.04),      # 止盈比例
+    )
+    
+    def __init__(self):
+        # 初始化订单变量
+        self.order = None
+        self.buyprice = None
+        self.buycomm = None
+        
+        # 只使用信号量_等级指标
+        self.signal_level = self.datas[0].信号量_等级
+        
+        # 记录交易统计
+        self.trade_count = 0
+        self.win_count = 0
+        self.loss_count = 0
+        
+    def log(self, txt, dt=None):
+        """记录日志"""
+        dt = dt or self.datas[0].datetime.date(0)
+        print(f'{dt.isoformat()}, {txt}')
+    
+    def notify_order(self, order):
+        """订单状态通知"""
+        if order.status in [order.Submitted, order.Accepted]:
+            return
+        
+        if order.status in [order.Completed]:
+            if order.isbuy():
+                self.log(f'买入执行, 价格: {order.executed.price:.2f}, 成本: {order.executed.value:.2f}, 手续费: {order.executed.comm:.2f}')
+                self.buyprice = order.executed.price
+                self.buycomm = order.executed.comm
+            else:
+                self.log(f'卖出执行, 价格: {order.executed.price:.2f}, 成本: {order.executed.value:.2f}, 手续费: {order.executed.comm:.2f}')
+            
+        elif order.status in [order.Canceled, order.Margin, order.Rejected]:
+            self.log('订单取消/保证金不足/拒绝')
+        
+        self.order = None
+    
+    def notify_trade(self, trade):
+        """交易完成通知"""
+        if not trade.isclosed:
+            return
+        
+        self.trade_count += 1
+        if trade.pnl > 0:
+            self.win_count += 1
+        else:
+            self.loss_count += 1
+        
+        self.log(f'交易完成, 毛利润: {trade.pnl:.2f}, 净利润: {trade.pnlcomm:.2f}')
+        self.log(f'胜率: {self.win_count}/{self.trade_count} ({self.win_count/self.trade_count*100:.1f}%)')
+    
+    def next(self):
+        """主要策略逻辑 - 只基于信号量_等级"""
+        # 如果有未完成的订单，等待
+        if self.order:
+            return
+        
+        # 获取当前信号量等级
+        current_level = self.signal_level[0]
+        
+        # 检查是否持仓
+        if not self.position:
+            # 买入条件：信号量等级 <= 买入阈值
+            if current_level <= self.p.buy_level:
+                self.log(f'买入信号, 信号量等级: {current_level}')
+                self.order = self.buy(size=self.p.position_size)
+        
+        else:
+            # 持仓时的卖出逻辑
+            sell_signal = False
+            sell_reason = ""
+            
+            # 止损
+            if self.data.close[0] < self.buyprice * (1 - self.p.stop_loss):
+                sell_signal = True
+                sell_reason = "止损"
+            
+            # 止盈
+            elif self.data.close[0] > self.buyprice * (1 + self.p.take_profit):
+                sell_signal = True
+                sell_reason = "止盈"
+            
+            # 信号反转：信号量等级 >= 卖出阈值
+            elif current_level >= self.p.sell_level:
+                sell_signal = True
+                sell_reason = f"信号反转 (等级: {current_level})"
+            
+            if sell_signal:
+                self.log(f'卖出信号: {sell_reason}')
+                self.order = self.sell(size=self.p.position_size)
+
 class EmotionSignalStrategy(bt.Strategy):
-    """基于情绪信号的交易策略"""
+    """基于情绪信号的交易策略 - 保留原版本作为对比"""
     
     params = (
         ('signal_threshold', 0.5),  # 信号阈值

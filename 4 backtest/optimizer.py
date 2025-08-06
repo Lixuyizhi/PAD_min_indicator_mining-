@@ -6,7 +6,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 from data_loader import load_and_prepare_data
-from emotion_strategy import EmotionSignalStrategy, EmotionMomentumStrategy
+from emotion_strategy import EmotionSignalStrategy, EmotionMomentumStrategy, SignalLevelStrategy
 
 class ParameterOptimizer:
     """参数优化器"""
@@ -98,6 +98,10 @@ class ParameterOptimizer:
         
         # 运行回测
         results = cerebro.run()
+        
+        if not results:
+            return None
+        
         strat = results[0]
         
         # 获取结果
@@ -105,11 +109,14 @@ class ParameterOptimizer:
         total_return = (final_value - self.initial_cash) / self.initial_cash * 100
         
         # 获取分析器结果
-        sharpe_ratio = strat.analyzers.sharpe.get_analysis()
-        sharpe = sharpe_ratio.get('sharperatio', 0)
+        sharpe = strat.analyzers.sharpe.get_analysis().get('sharperatio', 0)
+        if sharpe is None:
+            sharpe = 0
         
         drawdown = strat.analyzers.drawdown.get_analysis()
         max_dd = drawdown.get('max', {}).get('drawdown', 0)
+        if max_dd is None:
+            max_dd = 0
         
         trades = strat.analyzers.trades.get_analysis()
         total_trades = trades.get('total', {}).get('total', 0)
@@ -117,6 +124,10 @@ class ParameterOptimizer:
         # 计算胜率
         won_trades = trades.get('won', {}).get('total', 0)
         win_rate = (won_trades / total_trades * 100) if total_trades > 0 else 0
+        
+        # 如果是SignalLevelStrategy，使用策略内部的胜率统计
+        if hasattr(strat, 'trade_count') and strat.trade_count > 0:
+            win_rate = (strat.win_count / strat.trade_count * 100)
         
         return {
             'final_value': final_value,
@@ -154,6 +165,19 @@ class ParameterOptimizer:
         print(f"收益率标准差: {np.std(returns):.2f}%")
         print(f"最高收益率: {max(returns):.2f}%")
         print(f"最低收益率: {min(returns):.2f}%")
+    
+    def optimize_signal_level_strategy(self, filename, start_date=None, end_date=None):
+        """优化信号量等级策略"""
+        param_ranges = {
+            'buy_level': [5, 6, 7, 8],           # 买入等级阈值
+            'sell_level': [2, 3, 4, 5],           # 卖出等级阈值
+            'position_size': [0.05, 0.1, 0.15, 0.2], # 仓位大小
+            'stop_loss': [0.015, 0.02, 0.025, 0.03], # 止损比例
+            'take_profit': [0.03, 0.04, 0.05, 0.06]  # 止盈比例
+        }
+        
+        return self.optimize_strategy(filename, SignalLevelStrategy, param_ranges, 
+                                   start_date, end_date)
     
     def optimize_emotion_signal_strategy(self, filename, start_date=None, end_date=None):
         """优化情绪信号策略"""
@@ -198,6 +222,10 @@ def run_optimization_example():
     test_file = files[0]
     print(f"使用文件: {test_file}")
     
+    # 优化信号量等级策略
+    print("\n优化信号量等级策略...")
+    signal_level_results = optimizer.optimize_signal_level_strategy(test_file)
+    
     # 优化情绪信号策略
     print("\n优化情绪信号策略...")
     emotion_results = optimizer.optimize_emotion_signal_strategy(test_file)
@@ -206,8 +234,8 @@ def run_optimization_example():
     print("\n优化情绪动量策略...")
     momentum_results = optimizer.optimize_emotion_momentum_strategy(test_file)
     
-    return emotion_results, momentum_results
+    return signal_level_results, emotion_results, momentum_results
 
 if __name__ == "__main__":
     # 运行参数优化
-    emotion_results, momentum_results = run_optimization_example() 
+    signal_level_results, emotion_results, momentum_results = run_optimization_example() 
