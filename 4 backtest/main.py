@@ -15,7 +15,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from data_loader import EmotionDataLoader
 from backtest_engine import EmotionBacktestEngine
 from optimizer import ParameterOptimizer
-from emotion_strategy import BollingerBandsStrategy, TurtleTradingStrategy, SignalLevelReverseStrategy
+from emotion_strategy import BollingerBandsStrategy, TurtleTradingStrategy, SignalLevelReverseStrategy, SignalLevelTechnicalStrategy
 from analyst_visualize import BacktestAnalyzer, create_comparison_chart
 
 def run_backtest(data_file_path, strategy_type="bollinger_bands", plot=True):
@@ -24,7 +24,7 @@ def run_backtest(data_file_path, strategy_type="bollinger_bands", plot=True):
     
     参数:
         data_file_path: 数据文件路径
-        strategy_type: 策略类型 ('bollinger_bands', 'turtle_trading', 'signal_level_reverse')
+        strategy_type: 策略类型 ('bollinger_bands', 'turtle_trading', 'signal_level_reverse', 'signal_level_technical')
         plot: 是否显示图表
     """
     print("=" * 60)
@@ -71,9 +71,27 @@ def run_backtest(data_file_path, strategy_type="bollinger_bands", plot=True):
             'take_profit': 0.04,          # 止盈比例
             'lookback_period': 5          # 回看期数
         }
+    elif strategy_type == "signal_level_technical":
+        strategy_class = SignalLevelTechnicalStrategy
+        strategy_params = {
+            'signal_level_threshold': 3,  # 信号量等级阈值
+            'position_size': 0.2,         # 仓位大小
+            'stop_loss': 0.02,            # 止损比例
+            'take_profit': 0.04,          # 止盈比例
+            'rsi_period': 14,             # RSI周期
+            'rsi_oversold': 30,           # RSI超卖阈值
+            'rsi_overbought': 70,         # RSI超买阈值
+            'macd_fast': 12,              # MACD快线
+            'macd_slow': 26,              # MACD慢线
+            'macd_signal': 9,             # MACD信号线
+            'bb_period': 20,              # 布林带周期
+            'bb_dev': 2.0,                # 布林带标准差
+            'volume_ratio': 1.1,          # 成交量比率
+            'cooldown_period': 5          # 交易冷却期
+        }
     else:
         print(f"未知的策略类型: {strategy_type}")
-        print("支持的策略类型: bollinger_bands, turtle_trading, signal_level_reverse")
+        print("支持的策略类型: bollinger_bands, turtle_trading, signal_level_reverse, signal_level_technical")
         return None
     
     # 运行回测
@@ -87,7 +105,7 @@ def run_optimization(data_file_path, strategy_type="bollinger_bands"):
     
     参数:
         data_file_path: 数据文件路径
-        strategy_type: 策略类型 ('bollinger_bands', 'turtle_trading', 'signal_level_reverse')
+        strategy_type: 策略类型 ('bollinger_bands', 'turtle_trading', 'signal_level_reverse', 'signal_level_technical')
     """
     print("=" * 60)
     print("参数优化")
@@ -104,8 +122,11 @@ def run_optimization(data_file_path, strategy_type="bollinger_bands"):
         results = optimizer.optimize_turtle_trading_strategy(data_file_path)
     elif strategy_type == "signal_level_reverse":
         results = optimizer.optimize_signal_level_reverse_strategy(data_file_path)
+    elif strategy_type == "signal_level_technical":
+        results = optimizer.optimize_signal_level_technical_strategy(data_file_path)
     else:
         print(f"未知的策略类型: {strategy_type}")
+        print("支持的策略类型: bollinger_bands, turtle_trading, signal_level_reverse, signal_level_technical")
         return None
     
     return results
@@ -159,6 +180,24 @@ def run_strategy_comparison(data_file_path):
         'lookback_period': 5
     }
     
+    # 信号量等级技术策略参数
+    signal_technical_params = {
+        'signal_level_threshold': 3,
+        'position_size': 0.2,
+        'stop_loss': 0.02,
+        'take_profit': 0.04,
+        'rsi_period': 14,
+        'rsi_oversold': 30,
+        'rsi_overbought': 70,
+        'macd_fast': 12,
+        'macd_slow': 26,
+        'macd_signal': 9,
+        'bb_period': 20,
+        'bb_dev': 2.0,
+        'volume_ratio': 1.1,
+        'cooldown_period': 5
+    }
+    
     print("运行布林带策略...")
     bollinger_result = engine.run_backtest(data_file_path, BollingerBandsStrategy, bollinger_params, plot=False)
     
@@ -167,6 +206,9 @@ def run_strategy_comparison(data_file_path):
     
     print("\n运行信号量等级反向策略...")
     signal_reverse_result = engine.run_backtest(data_file_path, SignalLevelReverseStrategy, signal_reverse_params, plot=False)
+    
+    print("\n运行信号量等级技术策略...")
+    signal_technical_result = engine.run_backtest(data_file_path, SignalLevelTechnicalStrategy, signal_technical_params, plot=False)
     
     # 分析结果
     results = []
@@ -199,6 +241,15 @@ def run_strategy_comparison(data_file_path):
         except Exception as e:
             print(f"信号量反向策略分析失败: {e}")
     
+    if signal_technical_result is not None:
+        try:
+            signal_technical_analysis = analyzer.analyze_strategy_performance(signal_technical_result)
+            analyzer.print_analysis_report(signal_technical_analysis, "信号量技术策略")
+            results.append(signal_technical_analysis)
+            strategy_names.append("信号量技术策略")
+        except Exception as e:
+            print(f"信号量技术策略分析失败: {e}")
+    
     # # 创建对比图表
     # if len(results) > 1:
     #     print("\n" + "="*60)
@@ -206,7 +257,7 @@ def run_strategy_comparison(data_file_path):
     #     print("="*60)
     #     create_comparison_chart(results, strategy_names)
     
-    return bollinger_result, turtle_result, signal_reverse_result
+    return bollinger_result, turtle_result, signal_reverse_result, signal_technical_result
 
 def list_available_files():
     """列出可用的数据文件"""
@@ -239,7 +290,7 @@ def main():
     DATA_FILE_PATH = "sc2210_with_emotion_1h_lag120min.xlsx"  # 修改为您的数据文件路径
     
     # 在这里直接指定策略类型
-    STRATEGY_TYPE = "signal_level_reverse"  # 可选: "bollinger_bands", "turtle_trading", "signal_level_reverse"
+    STRATEGY_TYPE = "signal_level_technical"  # 可选: "bollinger_bands", "turtle_trading", "signal_level_reverse", "signal_level_technical"
     
     # 在这里指定运行模式
     RUN_MODE = "backtest"  # 可选: "backtest", "optimize", "compare"

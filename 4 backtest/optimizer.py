@@ -6,7 +6,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 from data_loader import load_and_prepare_data
-from emotion_strategy import BollingerBandsStrategy, TurtleTradingStrategy, SignalLevelReverseStrategy
+from emotion_strategy import BollingerBandsStrategy, TurtleTradingStrategy, SignalLevelReverseStrategy, SignalLevelTechnicalStrategy
 
 class ParameterOptimizer:
     """参数优化器"""
@@ -204,6 +204,28 @@ class ParameterOptimizer:
         
         return self.optimize_strategy(filename, SignalLevelReverseStrategy, param_ranges, 
                                    start_date, end_date)
+    
+    def optimize_signal_level_technical_strategy(self, filename, start_date=None, end_date=None):
+        """优化信号量等级技术策略"""
+        param_ranges = {
+            'signal_level_threshold': [2, 3, 4, 5],  # 信号量等级阈值
+            'position_size': [0.1, 0.15, 0.2, 0.25], # 仓位大小
+            'stop_loss': [0.015, 0.02, 0.025, 0.03], # 止损比例
+            'take_profit': [0.03, 0.04, 0.05, 0.06], # 止盈比例
+            'rsi_period': [10, 14, 20],               # RSI周期
+            'rsi_oversold': [25, 30, 35],             # RSI超卖阈值
+            'rsi_overbought': [65, 70, 75],           # RSI超买阈值
+            'macd_fast': [10, 12, 14],                # MACD快线
+            'macd_slow': [24, 26, 28],                # MACD慢线
+            'macd_signal': [7, 9, 11],                # MACD信号线
+            'bb_period': [15, 20, 25],                # 布林带周期
+            'bb_dev': [1.8, 2.0, 2.2],               # 布林带标准差
+            'volume_ratio': [1.0, 1.1, 1.2],         # 成交量比率
+            'cooldown_period': [3, 5, 7]              # 交易冷却期
+        }
+        
+        return self.optimize_strategy(filename, SignalLevelTechnicalStrategy, param_ranges, 
+                                   start_date, end_date)
 
 def run_optimization_example():
     """运行参数优化示例"""
@@ -234,8 +256,12 @@ def run_optimization_example():
     print("\n优化信号量等级反向策略...")
     signal_reverse_results = optimizer.optimize_signal_level_reverse_strategy(test_file)
     
-    return bollinger_results, turtle_results, signal_reverse_results
+    # 优化信号量等级技术策略
+    print("\n优化信号量等级技术策略...")
+    signal_technical_results = optimizer.optimize_signal_level_technical_strategy(test_file)
+    
+    return bollinger_results, turtle_results, signal_reverse_results, signal_technical_results
 
 if __name__ == "__main__":
     # 运行参数优化
-    bollinger_results, turtle_results, signal_reverse_results = run_optimization_example() 
+    bollinger_results, turtle_results, signal_reverse_results, signal_technical_results = run_optimization_example() 
