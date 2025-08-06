@@ -1,92 +1,124 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-数据加载模块
-负责加载和预处理回测数据
-"""
-
 import pandas as pd
+import numpy as np
+from pathlib import Path
 import backtrader as bt
-import re
-import os
+from datetime import datetime
+import warnings
+warnings.filterwarnings('ignore')
 
-class SignalLevelData(bt.feeds.PandasData):
-    """自定义数据源，包含信号量等级"""
+class EmotionDataLoader:
+    """情绪数据加载器"""
     
-    # 定义数据列
-    lines = ('signal_level',)
-    
-    params = (
-        ('datetime', None),
-        ('open', 'Open'),
-        ('high', 'High'),
-        ('low', 'Low'),
-        ('close', 'Close'),
-        ('volume', 'Volume'),
-        ('openinterest', None),
-        ('signal_level', '信号量_等级'),
-    )
-
-class DataLoader:
-    """数据加载器"""
-    
-    def __init__(self, data_path):
-        """
-        初始化数据加载器
+    def __init__(self, data_dir="../futures_emo_combined_data"):
+        self.data_dir = Path(data_dir)
         
-        Parameters:
-        data_path: str, 数据文件路径
-        """
-        self.data_path = data_path
-        self.resample_rule = 'unknown'
-        self.lag_minutes = 'unknown'
+    def load_data(self, filename):
+        """加载指定的数据文件"""
+        file_path = self.data_dir / filename
+        if not file_path.exists():
+            raise FileNotFoundError(f"文件不存在: {file_path}")
+            
+        # 读取Excel文件
+        df = pd.read_excel(file_path)
         
-        # 从文件名提取信息
-        self._extract_file_info()
-    
-    def _extract_file_info(self):
-        """从文件名提取信息"""
-        filename = os.path.basename(self.data_path)
-        match = re.search(r'_([0-9a-zA-Z]+)_lag(\d+)min', filename)
-        if match:
-            self.resample_rule = match.group(1)
-            self.lag_minutes = match.group(2)
-    
-    def load_data(self):
-        """加载和预处理数据"""
-        print(f"正在加载数据: {self.data_path}")
-        
-        # 读取数据
-        df = pd.read_excel(self.data_path)
+        # 确保DateTime列是datetime类型
         df['DateTime'] = pd.to_datetime(df['DateTime'])
         
-        # 设置索引
+        # 设置DateTime为索引
         df.set_index('DateTime', inplace=True)
         
-        # 确保必要的列存在
-        required_columns = ['Open', 'High', 'Low', 'Close', 'Volume', '信号量_等级']
-        missing_columns = [col for col in required_columns if col not in df.columns]
-        if missing_columns:
-            raise ValueError(f"缺少必要的列: {missing_columns}")
-        
-        # 处理缺失值
-        df = df.dropna(subset=['信号量_等级', 'Close'])
-        
-        print(f"数据加载完成: {len(df)}行, {len(df.columns)}列")
-        print(f"时间范围: {df.index.min()} 到 {df.index.max()}")
-        print(f"信号量等级范围: {df['信号量_等级'].min():.2f} - {df['信号量_等级'].max():.2f}")
+        # 按时间排序
+        df.sort_index(inplace=True)
         
         return df
     
-    def get_backtrader_data(self):
-        """获取backtrader格式的数据"""
-        df = self.load_data()
-        return SignalLevelData(dataname=df)
+    def get_available_files(self):
+        """获取所有可用的数据文件"""
+        excel_files = list(self.data_dir.glob("*.xlsx"))
+        return [f.name for f in excel_files]
     
-    def get_data_info(self):
-        """获取数据基本信息"""
-        return {
-            'resample_rule': self.resample_rule,
-            'lag_minutes': self.lag_minutes,
-            'file_path': self.data_path
-        } 
+    def get_file_info(self, filename):
+        """获取文件信息"""
+        df = self.load_data(filename)
+        info = {
+            'filename': filename,
+            'shape': df.shape,
+            'date_range': (df.index.min(), df.index.max()),
+            'columns': list(df.columns),
+            'sample_data': df.head(3)
+        }
+        return info
+
+class BacktraderDataAdapter:
+    """将pandas数据适配为backtrader格式"""
+    
+    @staticmethod
+    def create_data_feed(df, name="emotion_data"):
+        """创建backtrader数据源"""
+        # 创建数据源
+        data = bt.feeds.PandasData(
+            dataname=df,
+            datetime=None,  # 使用索引作为时间
+            open='Open',
+            high='High', 
+            low='Low',
+            close='Close',
+            volume='Volume',
+            openinterest='OpenInterest',
+            name=name
+        )
+        
+        # 添加情绪指标作为数据属性
+        if '极性' in df.columns:
+            data.极性 = df['极性'].values
+        if '强度' in df.columns:
+            data.强度 = df['强度'].values
+        if '支配维度' in df.columns:
+            data.支配维度 = df['支配维度'].values
+        if '信号量' in df.columns:
+            data.信号量 = df['信号量'].values
+        if '信号量_等级' in df.columns:
+            data.信号量_等级 = df['信号量_等级'].values
+            
+        return data
+    
+    @staticmethod
+    def add_emotion_indicators(df):
+        """添加情绪指标到数据中"""
+        # 确保所有情绪指标列存在
+        emotion_cols = ['极性', '强度', '支配维度', '信号量', '信号量_等级']
+        
+        for col in emotion_cols:
+            if col not in df.columns:
+                df[col] = 0.0
+        
+        return df
+
+def load_and_prepare_data(filename, data_dir="../futures_emo_combined_data"):
+    """加载并准备数据用于回测"""
+    loader = EmotionDataLoader(data_dir)
+    df = loader.load_data(filename)
+    
+    # 添加情绪指标
+    df = BacktraderDataAdapter.add_emotion_indicators(df)
+    
+    # 创建backtrader数据源
+    data_feed = BacktraderDataAdapter.create_data_feed(df, name=filename)
+    
+    return df, data_feed
+
+if __name__ == "__main__":
+    # 测试数据加载
+    loader = EmotionDataLoader()
+    
+    print("可用的数据文件:")
+    files = loader.get_available_files()
+    for i, file in enumerate(files[:5]):  # 只显示前5个
+        print(f"{i+1}. {file}")
+    
+    if files:
+        print(f"\n分析第一个文件: {files[0]}")
+        info = loader.get_file_info(files[0])
+        print(f"数据形状: {info['shape']}")
+        print(f"时间范围: {info['date_range']}")
+        print(f"列名: {info['columns']}") 
