@@ -11,8 +11,8 @@ warnings.filterwarnings('ignore')
 
 # ======================== 配置参数 ========================
 # 可以在这里设置时间范围
-START_YEAR = 2024
-END_YEAR = 2024  # 设置为同一个年份表示只需要一年数据
+START_YEAR = 2022
+END_YEAR = 2025  # 设置为同一个年份表示只需要一年数据
 RESAMPLE_RULE = '1min'  # 新增：聚合粒度，可选'1min'、'15min'、'30min'等
 
 
@@ -220,8 +220,8 @@ def generate_features(input_file, output_file=None, resample_rule='1min'):
 
 # ======================== 使用示例 ========================
 if __name__ == "__main__":
-    input_file = "./futures_data/ag2212_major_contracts.csv"
-    output_file = f"./futures_data/ag2212_major_contracts_{START_YEAR}_{RESAMPLE_RULE}.xlsx"
+    input_file = "./futures_data/cu2210_major_contracts.csv"
+    output_file = f"./futures_data/cu2210_major_contracts_{START_YEAR}_{RESAMPLE_RULE}.xlsx"
     print("=" * 70)
     print(f"开始处理 {START_YEAR} 年数据并生成技术指标特征（{RESAMPLE_RULE} 粒度）")
     print("=" * 70)

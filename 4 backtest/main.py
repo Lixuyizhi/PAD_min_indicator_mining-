@@ -41,35 +41,33 @@ def run_backtest(data_file_path, strategy_type="bollinger_bands", plot=True):
     if strategy_type == "bollinger_bands":
         strategy_class = BollingerBandsStrategy
         strategy_params = {
-            'bb_period': 15,            # 布林带周期 (优化后)
-            'bb_dev': 1.8,              # 布林带标准差倍数 (优化后)
-            'position_size': 0.3,       # 仓位大小 (优化后)
-            'stop_loss': 0.03,          # 止损比例 (优化后)
-            'take_profit': 0.06,        # 止盈比例 (优化后)
-            'min_volume_ratio': 1.2,    # 最小成交量比率
-            'trend_filter': True        # 是否启用趋势过滤
+            'bb_period': 20,             # 布林带周期 (标准设置)
+            'bb_dev': 2.0,               # 布林带标准差倍数 (标准设置)
+            'position_size': 0.25,        # 仓位大小 
+            'stop_loss': 0.06,            # 止损比例 
+            'take_profit': 0.10,          # 止盈比例 
+            'cooldown_period': 8,         # 交易冷却期
         }
     elif strategy_type == "turtle_trading":
         strategy_class = TurtleTradingStrategy
         strategy_params = {
-            'entry_period': 15,         # 入场突破周期 (优化后)
-            'exit_period': 8,           # 出场突破周期 (优化后)
-            'atr_period': 14,           # ATR周期 (优化后)
-            'position_size': 0.25,      # 仓位大小 (优化后)
-            'risk_percent': 0.015,      # 风险百分比 (优化后)
-            'min_volume_ratio': 1.1,    # 最小成交量比率
-            'trend_strength': 0.02,     # 趋势强度阈值
-            'pyramid_enable': True,     # 是否启用金字塔加仓
-            'max_pyramids': 2           # 最大加仓次数
+            'entry_period': 12,            # 唐奇安通道入场周期 (从20缩短到12)
+            'exit_period': 6,              # 唐奇安通道出场周期 (从10缩短到6)
+            'atr_period': 14,              # ATR周期 (从20缩短到14)
+            'position_size': 0.25,         # 仓位大小 (25%)
+            'atr_multiplier': 2.0,         # ATR倍数 (经典2倍)
+            'risk_percent': 0.02,          # 风险百分比 (2%)
         }
     elif strategy_type == "signal_level_reverse":
         strategy_class = SignalLevelReverseStrategy
         strategy_params = {
-            'signal_level_threshold': 6,  # 信号量等级阈值
-            'position_size': 0.1,         # 仓位大小
-            'stop_loss': 0.02,            # 止损比例
-            'take_profit': 0.04,          # 止盈比例
-            'lookback_period': 5          # 回看期数
+            'signal_level_threshold': 4,  # 信号量等级阈值 (≤4时买入，≥5时卖出，增加买入机会)
+            'position_size': 0.2,         # 仓位大小 (20%，提高收益潜力)
+            'stop_loss': 0.02,            # 止损比例 (2%，快速止损)
+            'take_profit': 0.08,          # 止盈比例 (8%，增加盈利空间)
+            'lookback_period': 4,         # 回看期数 (4期，提高信号灵敏度)
+            'min_volume_ratio': 1.0,      # 最小成交量比率 (放宽到1.0倍，最大化交易机会)
+            'trend_filter': False         # 趋势过滤 (关闭，增加交易机会)
         }
     elif strategy_type == "signal_level_technical":
         strategy_class = SignalLevelTechnicalStrategy
@@ -173,11 +171,13 @@ def run_strategy_comparison(data_file_path):
     
     # 信号量等级反向策略参数
     signal_reverse_params = {
-        'signal_level_threshold': 6,
-        'position_size': 0.1,
+        'signal_level_threshold': 3,
+        'position_size': 0.12,
         'stop_loss': 0.02,
-        'take_profit': 0.04,
-        'lookback_period': 5
+        'take_profit': 0.06,
+        'lookback_period': 12,
+        'min_volume_ratio': 1.3,
+        'trend_filter': True
     }
     
     # 信号量等级技术策略参数
